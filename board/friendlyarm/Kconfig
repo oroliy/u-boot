@@ -36,3 +36,4 @@ config ROOT_PART
 	  Environment variable rootpart is set to this value.
 
 source "board/friendlyarm/nanopi2/Kconfig"
+source "board/friendlyarm/x6818/Kconfig"

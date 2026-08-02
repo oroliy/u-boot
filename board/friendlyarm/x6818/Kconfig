@@ -1,0 +1,12 @@
+if TARGET_X6818
+
+config SYS_BOARD
+	default "x6818"
+
+config SYS_VENDOR
+	default "friendlyarm"
+
+config SYS_CONFIG_NAME
+	default "x6818"
+
+endif

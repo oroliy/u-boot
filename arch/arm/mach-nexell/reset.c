@@ -30,3 +30,18 @@ void nx_rstcon_setrst(u32 rstindex, enum rstcon status)
 	curstat		|= (status & 0x01) << bitpos;
 	writel(curstat, &nx_rstcon->regrst[regnum]);
 }
+
+/*
+ * Nexell system reset: write all-ones to the ALIVE "reset signature" scratch
+ * register (SCR_RESET_SIG_RESET = PHY_BASEADDR_ALIVE + 0x0DC). This matches
+ * the vendor nxp_cpu_reset() in arch/arm/mach-s5p6818/s5p6818.c.
+ */
+#define SCR_RESET_SIG_RESET	(PHY_BASEADDR_ALIVE + 0x0DC)
+
+void reset_cpu(void)
+{
+	writel(0xFFFFFFFF, SCR_RESET_SIG_RESET);
+
+	while (1)
+		;
+}

@@ -9,7 +9,7 @@
 #include <asm/io.h>
 #include <asm/arch/nexell.h>
 #include <asm/arch/clk.h>
-#if defined(CONFIG_ARCH_S5P4418)
+#if (defined(CONFIG_ARCH_S5P4418) || defined(CONFIG_ARCH_S5P6818))
 #include <asm/arch/reset.h>
 #endif
 
@@ -289,7 +289,7 @@ unsigned long long get_ticks(void)
 	return get_timer_masked();
 }
 
-#if defined(CONFIG_ARCH_S5P4418)
+#if (defined(CONFIG_ARCH_S5P4418) || defined(CONFIG_ARCH_S5P6818))
 ulong get_tbclk(void)
 {
 	ulong  tbclk = TIMER_FREQ;

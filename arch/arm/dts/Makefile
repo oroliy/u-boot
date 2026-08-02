@@ -53,6 +53,9 @@ dtb-$(CONFIG_ROCKCHIP_RK3368) += \
 dtb-$(CONFIG_ARCH_S5P4418) += \
 	s5p4418-nanopi2.dtb
 
+dtb-$(CONFIG_ARCH_S5P6818) += \
+	s5p6818-x6818.dtb
+
 dtb-$(CONFIG_ARCH_MESON) += \
 	meson-a1-ad401.dtb
 
