@@ -67,6 +67,12 @@
 	status = "okay";
 };
 
+/* USB VBUS control is board-specific; leave it to the controller/board
+ * power path and do not toggle an unverified GPIO from U-Boot. */
+&ehci {
+	status = "okay";
+};
+
 &dp0 {
 		status = "okay";
 		module = <0>;

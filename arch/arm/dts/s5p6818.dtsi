@@ -94,6 +94,12 @@
 		status = "disabled";
 	};
 
+	ehci:usb@c0030000 {
+		compatible = "nexell,s5p6818-ehci";
+		reg = <0xc0030000 0x1000>;
+		status = "disabled";
+	};
+
 	dp0:dp@c0102800 {
 		compatible = "nexell,nexell-display";
 		reg = <0xc0102800 0x100>;

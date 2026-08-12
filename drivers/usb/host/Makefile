@@ -33,6 +33,7 @@ obj-$(CONFIG_USB_EHCI_MX5) += ehci-mx5.o
 obj-$(CONFIG_USB_EHCI_MX6) += ehci-mx6.o
 obj-$(CONFIG_USB_EHCI_MX7) += ehci-mx6.o
 obj-$(CONFIG_USB_EHCI_NPCM) += ehci-npcm.o
+obj-$(CONFIG_USB_EHCI_NEXELL) += ehci-nexell.o
 obj-$(CONFIG_USB_EHCI_OMAP) += ehci-omap.o
 obj-$(CONFIG_USB_EHCI_MARVELL) += ehci-marvell.o
 obj-$(CONFIG_USB_EHCI_MSM) += ehci-msm.o

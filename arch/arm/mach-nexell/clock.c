@@ -159,6 +159,12 @@ static struct clk_dev_peri clk_periphs[]
 		    PHY_BASEADDR_CLKGEN38, (I_PLL_0_2)),
 	CLK_PERI_1S(DEV_NAME_SPI,	2,	CLK_ID_SPI_2,
 		    PHY_BASEADDR_CLKGEN39, (I_PLL_0_2)),
+#if defined(CONFIG_ARCH_S5P6818)
+	/* USB2 host uses a two-stage 12 MHz reference clock. */
+	CLK_PERI_2S(DEV_NAME_USB2HOST, -1, CLK_ID_USB2HOST,
+		    PHY_BASEADDR_CLKGEN32,
+		    (I_PLL_0_3), (I_PLL_0_3 | I_EXTCLK1)),
+#endif
 };
 
 #define	CLK_PERI_NUM		((int)ARRAY_SIZE(clk_periphs))
