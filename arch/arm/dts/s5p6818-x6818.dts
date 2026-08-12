@@ -73,6 +73,10 @@
 	status = "okay";
 };
 
+&ohci {
+	status = "okay";
+};
+
 &dp0 {
 		status = "okay";
 		module = <0>;

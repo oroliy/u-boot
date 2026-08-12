@@ -237,6 +237,7 @@ config USB_EHCI_NPCM
 config USB_EHCI_NEXELL
 	bool "Support for Nexell S5P6818 on-chip EHCI USB controller"
 	depends on ARCH_S5P6818
+	select USB_NEXELL_HOST
 	---help---
 	  Enables support for the on-chip EHCI host controller on
 	  Nexell S5P6818 SoCs.
@@ -339,6 +340,9 @@ endif # USB_EHCI_HCD
 config USB_OHCI_NEW
 	bool
 
+config USB_NEXELL_HOST
+	bool
+
 config SYS_USB_OHCI_CPU_INIT
 	bool
 
@@ -384,6 +388,14 @@ config USB_OHCI_NPCM
 	---help---
 	  Enables support for the on-chip OHCI controller on
 	  Nuvoton NPCM chips.
+
+config USB_OHCI_NEXELL
+	bool "Support for Nexell S5P6818 on-chip OHCI USB controller"
+	depends on ARCH_S5P6818
+	select USB_NEXELL_HOST
+	---help---
+	  Enables support for the on-chip OHCI companion controller on
+	  Nexell S5P6818 SoCs.
 
 endif # USB_OHCI_HCD
 

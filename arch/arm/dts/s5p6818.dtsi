@@ -97,6 +97,13 @@
 	ehci:usb@c0030000 {
 		compatible = "nexell,s5p6818-ehci";
 		reg = <0xc0030000 0x1000>;
+		companion = <&ohci>;
+		status = "disabled";
+	};
+
+	ohci:usb@c0020000 {
+		compatible = "nexell,s5p6818-ohci";
+		reg = <0xc0020000 0x1000>;
 		status = "disabled";
 	};
 

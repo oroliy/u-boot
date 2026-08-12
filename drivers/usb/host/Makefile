@@ -14,6 +14,7 @@ endif
 
 # ohci
 obj-$(CONFIG_USB_OHCI_NEW) += ohci-hcd.o
+obj-$(CONFIG_USB_NEXELL_HOST) += nexell-usb-host.o
 obj-$(CONFIG_USB_ATMEL) += ohci-at91.o
 obj-$(CONFIG_USB_OHCI_DA8XX) += ohci-da8xx.o
 obj-$(CONFIG_USB_R8A66597_HCD) += r8a66597-hcd.o
@@ -21,6 +22,7 @@ obj-$(CONFIG_USB_OHCI_LPC32XX) += ohci-lpc32xx.o
 obj-$(CONFIG_USB_OHCI_PCI) += ohci-pci.o
 obj-$(CONFIG_USB_OHCI_GENERIC) += ohci-generic.o
 obj-$(CONFIG_USB_OHCI_NPCM) += ohci-npcm.o
+obj-$(CONFIG_USB_OHCI_NEXELL) += ohci-nexell.o
 
 # echi
 obj-$(CONFIG_USB_EHCI_HCD) += ehci-hcd.o
