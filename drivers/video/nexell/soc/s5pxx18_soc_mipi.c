@@ -203,9 +203,9 @@ int32_t nx_mipi_get_interrupt_pending_number(u32 module_index)
 }
 
 #define writereg(regname, mask, value) \
-	regvalue = pregister->(regname);	\
+	regvalue = pregister->regname;	\
 	regvalue = (regvalue & (~(mask))) | (value); \
-	writel(regvalue, &pregister->(regname))
+	writel(regvalue, &pregister->regname)
 
 void nx_mipi_dsi_get_status(u32 module_index, u32 *pulps, u32 *pstop,
 			    u32 *pispllstable, u32 *pisinreset,

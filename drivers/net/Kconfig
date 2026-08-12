@@ -369,6 +369,16 @@ config ETH_DESIGNWARE
 	  100Mbit and 1 Gbit operation. You must enable CONFIG_PHYLIB to
 	  provide the PHY (physical media interface).
 
+config ETH_DESIGNWARE_NEXELL
+	bool "Nexell S5P6818 glue for Synopsys Designware Ethernet MAC"
+	depends on ETH_DESIGNWARE && ARCH_S5P6818
+	select DW_ALTDESCRIPTOR
+	select PHY_ADDR_ENABLE
+	select PHY_GIGE
+	select PHY_REALTEK
+	help
+	  Enable the S5P6818 GMAC clock, reset and RGMII pin configuration.
+
 config ETH_DESIGNWARE_MESON8B
 	bool "Amlogic Meson8b and later glue driver for Synopsys Designware Ethernet MAC"
 	select ETH_DESIGNWARE

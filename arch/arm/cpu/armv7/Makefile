@@ -39,4 +39,5 @@ obj-$(if $(filter ls102xa,$(SOC)),y) += ls102xa/
 obj-$(CONFIG_ARCH_SUNXI) += sunxi/
 obj-$(CONFIG_VF610) += vf610/
 obj-$(CONFIG_ARCH_S5P4418) += s5p4418/
+obj-$(CONFIG_ARCH_S5P6818) += s5p4418/
 obj-$(CONFIG_ARCH_NEXELL) += s5p-common/

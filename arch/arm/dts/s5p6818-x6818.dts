@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Nexell S5P6818 x6818 board device tree (AArch32, headless).
+ * Nexell S5P6818 x6818 board device tree (AArch32).
  *
  * Enables UART0 (console) and the dwmmc controllers (mmc0 = SD,
- * mmc2 = eMMC). No display.
+ * mmc2 = eMMC), GMAC/RGMII and the default 1024x600 MIPI panel.
  */
 
 /dts-v1/;
 #include "s5p6818.dtsi"
+#include <dt-bindings/gpio/gpio.h>
 
 / {
 	model = "Nexell S5P6818 x6818";
@@ -17,12 +18,21 @@
 		serial0 = "/uart@c00a1000";
 	};
 
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	/* eMMC is initialized before initr_env, so load the persistent env. */
+	config {
+		load-environment = <1>;
+	};
+
 	mmc0:mmc@c0062000 {
 		frequency = <50000000>;
 		drive_dly = <0x0>;
-		drive_shift = <0x03>;
-		sample_dly = <0x00>;
-		sample_shift = <0x02>;
+		drive_shift = <0x02>;
+		sample_dly = <0x1c>;
+		sample_shift = <0x01>;
 		mmcboost = <0>;
 		status = "okay";
 	};
@@ -30,9 +40,9 @@
 	mmc2:mmc@c0069000 {
 		frequency = <50000000>;
 		drive_dly = <0x0>;
-		drive_shift = <0x03>;
-		sample_dly = <0x00>;
-		sample_shift = <0x02>;
+		drive_shift = <0x02>;
+		sample_dly = <0x1c>;
+		sample_shift = <0x01>;
 		mmcboost = <0>;
 		status = "okay";
 	};
@@ -40,5 +50,106 @@
 	uart0:uart@c00a1000 {
 		skip-init;
 		status = "okay";
+	};
+};
+
+/* Expose the three hardware buses for diagnostics.  PMIC GPIO-I2C3 is
+ * board-specific and is intentionally not enabled here. */
+&i2c0 {
+	status = "okay";
+};
+
+&i2c1 {
+	status = "okay";
+};
+
+&i2c2 {
+	status = "okay";
+};
+
+&dp0 {
+		status = "okay";
+		module = <0>;
+		lcd-type = "mipi";
+		pinctrl-names = "default";
+		pinctrl-0 = <&mipi_panel_reset>;
+
+		dp-device {
+			/* Match the vendor S5P6818 panel init PLL: 100 MHz LP, 480 MHz HS. */
+			lp_bitrate = <100>;
+			hs_bitrate = <480>;
+		};
+
+		dp-sync {
+			h_active_len = <1024>;
+			/* Match the vendor lcd=wy070ml timing: 2/80/168. */
+			h_sync_width = <2>;
+			h_back_porch = <80>;
+			h_front_porch = <168>;
+			/* Vendor WY070ML configuration uses active-high HSYNC. */
+			h_sync_invert = <1>;
+			v_active_len = <600>;
+			v_sync_width = <3>;
+			v_back_porch = <20>;
+			v_front_porch = <12>;
+			/* Vendor WY070ML configuration uses active-high VSYNC. */
+			v_sync_invert = <1>;
+		};
+
+		dp-ctrl {
+			clk_src_lv0 = <2>;
+			clk_div_lv0 = <12>;
+			clk_src_lv1 = <7>;
+			clk_div_lv1 = <1>;
+			out_format = <3>;
+		};
+
+		dp-planes {
+			layer_top {
+				screen_width = <1024>;
+				screen_height = <600>;
+				video_prior = <2>;
+				back_color = <0>;
+			};
+
+			layer_0 {
+				width = <1024>;
+				height = <600>;
+				format = <0x46530000>;
+				pixel_byte = <4>;
+			};
+		};
+	};
+
+	&gmac {
+		status = "okay";
+		snps,reset-gpio = <&gpio_e 22 GPIO_ACTIVE_LOW>;
+		snps,reset-active-low;
+		snps,reset-delays-us = <100 100 30000>;
+	};
+
+&pinctrl {
+	gmac_rgmii_tx: gmac-rgmii-tx {
+		pins = "gpioe-7", "gpioe-8", "gpioe-9", "gpioe-10",
+		       "gpioe-11", "gpioe-14", "gpioe-15", "gpioe-16",
+		       "gpioe-17", "gpioe-18", "gpioe-19", "gpioe-20",
+		       "gpioe-21", "gpioe-24";
+		pin-function = <1>;
+		pin-pull = <2>;
+		pin-strength = <3>;
+	};
+
+	gmac_phy_reset: gmac-phy-reset {
+		pins = "gpioe-22";
+		pin-function = <0>;
+		pin-pull = <2>;
+		pin-strength = <3>;
+	};
+
+	mipi_panel_reset: mipi-panel-reset {
+		pins = "gpiob-8";
+		pin-function = <0>;
+		pin-pull = <2>;
+		pin-strength = <0>;
 	};
 };

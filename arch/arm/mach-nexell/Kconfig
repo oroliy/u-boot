@@ -16,7 +16,6 @@ config ARCH_S5P6818
 	select OF_CONTROL
 	select NX_GPIO
 	select DM_SERIAL
-	select PL01X_SERIAL
 	help
 	  Enable support for Nexell S5P6818 SoC (AArch32 mode).
 

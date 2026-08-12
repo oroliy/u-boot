@@ -31,16 +31,20 @@ void nx_rstcon_setrst(u32 rstindex, enum rstcon status)
 	writel(curstat, &nx_rstcon->regrst[regnum]);
 }
 
-/*
- * Nexell system reset: write all-ones to the ALIVE "reset signature" scratch
- * register (SCR_RESET_SIG_RESET = PHY_BASEADDR_ALIVE + 0x0DC). This matches
- * the vendor nxp_cpu_reset() in arch/arm/mach-s5p6818/s5p6818.c.
- */
-#define SCR_RESET_SIG_RESET	(PHY_BASEADDR_ALIVE + 0x0DC)
+/* S5P6818 CLKPWR reset registers. */
+#define CLKPWR_PWRCONT		(PHY_BASEADDR_CLKPWR + 0x224)
+#define CLKPWR_PWRMODE		(PHY_BASEADDR_CLKPWR + 0x228)
+#define CLKPWR_SWRSTENB		(1U << 3)
+#define CLKPWR_SWRESET		(1U << 12)
 
 void reset_cpu(void)
 {
-	writel(0xFFFFFFFF, SCR_RESET_SIG_RESET);
+	u32 val;
+
+	/* This is the sequence used by the vendor U-Boot and Linux BSP. */
+	val = readl((void __iomem *)CLKPWR_PWRCONT);
+	writel(val | CLKPWR_SWRSTENB, (void __iomem *)CLKPWR_PWRCONT);
+	writel(CLKPWR_SWRESET, (void __iomem *)CLKPWR_PWRMODE);
 
 	while (1)
 		;

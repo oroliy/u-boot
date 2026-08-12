@@ -526,6 +526,8 @@ static int nx_display_probe(struct udevice *dev)
 		 */
 	case 4:
 		uc_priv->bpix = VIDEO_BPP32;
+		/* MLC_RGBFMT_X8R8G8B8 stores B,G,R,X bytes on AArch32. */
+		uc_priv->format = VIDEO_X8R8G8B8;
 		break;
 	default:
 		printf("fail : not support LCD bit per pixel %d\n",
@@ -561,6 +563,11 @@ static int nx_display_bind(struct udevice *dev)
 	 * "#define BMP_LOAD_ADDR  0x78000000"
 	 */
 	plat->size = 0x1000000;
+
+#ifdef CONFIG_TARGET_X6818
+	/* Match the vendor x6818 CONFIG_FB_ADDR used by the working BSP. */
+	plat->base = 0x46000000;
+#endif
 
 	return 0;
 }

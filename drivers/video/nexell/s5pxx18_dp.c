@@ -42,6 +42,9 @@ void dp_control_init(int module)
 	nx_rstcon_setrst(RESET_ID_DISPLAY, RSTCON_ASSERT);
 	nx_rstcon_setrst(RESET_ID_DISPLAY, RSTCON_NEGATE);
 
+	/* The vendor RGB path selected the primary MLC before enabling MIPI. */
+	nx_disp_top_set_primary_mux(padmux_primary_mlc);
+
 	nx_dpc_set_clock_pclk_mode(module, nx_pclkmode_always);
 }
 

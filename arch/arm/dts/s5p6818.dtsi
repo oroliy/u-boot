@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Nexell S5P6818 SoC device tree (AArch32, headless).
+ * Nexell S5P6818 SoC device tree (AArch32).
  *
  * The S5P4418 and S5P6818 share the Nexell peripheral memory map
  * (UART0 = 0xC00A1000, see kernel/arch/arm/mach-s5p6818/include/mach/s5p6818.h),
- * so the IP node addresses are identical to s5p4418.dtsi. Display (MLC/DPC)
- * nodes are omitted for the headless bring-up.
+ * so the IP node addresses are identical to s5p4418.dtsi.
  */
 
 #include "skeleton.dtsi"
@@ -17,6 +16,9 @@
 		mmc0 = &mmc0;
 		mmc1 = &mmc1;
 		mmc2 = &mmc2;
+		i2c0 = &i2c0;
+		i2c1 = &i2c1;
+		i2c2 = &i2c2;
 		serial0 = &uart0;
 	};
 
@@ -67,6 +69,46 @@
 		clock-frequency = <100000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c0_sda>, <&i2c0_scl>;
+		status = "disabled";
+	};
+
+	i2c1:i2c@c00a5000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "nexell,s5pxx18-i2c";
+		reg = <0xc00a5000 0x100>;
+		clock-frequency = <100000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2c1_sda>, <&i2c1_scl>;
+		status = "disabled";
+	};
+
+	i2c2:i2c@c00a6000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "nexell,s5pxx18-i2c";
+		reg = <0xc00a6000 0x100>;
+		clock-frequency = <100000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2c2_sda>, <&i2c2_scl>;
+		status = "disabled";
+	};
+
+	dp0:dp@c0102800 {
+		compatible = "nexell,nexell-display";
+		reg = <0xc0102800 0x100>;
+		index = <0>;
+		bootph-all;
+		status = "disabled";
+	};
+
+	gmac:ethernet@c0060000 {
+		compatible = "nexell,s5p6818-dwmac";
+		reg = <0xc0060000 0x2000>;
+		phy-mode = "rgmii";
+		max-speed = <1000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&gmac_rgmii_tx>, <&gmac_phy_reset>;
 		status = "disabled";
 	};
 
@@ -124,35 +166,43 @@
 		#gpio-cells = <2>;
 	};
 
-	pinctrl@c0010000 {
+	pinctrl: pinctrl@c0010000 {
 		compatible = "nexell,s5pxx18-pinctrl";
 		reg = <0xc0010000 0xf000>;
 		bootph-all;
 	};
 
 	uart0:uart@c00a1000 {
-		compatible = "nexell,s5p6818-pl011", "arm,primecell";
+		compatible = "nexell,s5p6818-uart";
 		reg = <0xc00a1000 0x1000>;
+		clock-frequency = <50000000>;
+		id = <0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&uart0_rx>, <&uart0_tx>;
 		status = "disabled";
 	};
 
 	uart1:uart@c00a0000 {
-		compatible = "nexell,s5p6818-pl011", "arm,primecell";
+		compatible = "nexell,s5p6818-uart";
 		reg = <0xc00a0000 0x1000>;
+		clock-frequency = <50000000>;
+		id = <1>;
 		status = "disabled";
 	};
 
 	uart2:uart@c00a2000 {
-		compatible = "nexell,s5p6818-pl011", "arm,primecell";
+		compatible = "nexell,s5p6818-uart";
 		reg = <0xc00a2000 0x1000>;
+		clock-frequency = <50000000>;
+		id = <2>;
 		status = "disabled";
 	};
 
 	uart3:uart@c00a3000 {
-		compatible = "nexell,s5p6818-pl011", "arm,primecell";
+		compatible = "nexell,s5p6818-uart";
 		reg = <0xc00a3000 0x1000>;
+		clock-frequency = <50000000>;
+		id = <3>;
 		status = "disabled";
 	};
 };

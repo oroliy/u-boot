@@ -144,6 +144,10 @@ int timer_init(void)
 	TIMER_HZ = TIMER_FREQ / CONFIG_SYS_HZ;
 	tcnt = TIMER_COUNT == 0xFFFFFFFF ? TIMER_COUNT + 1 : tcnt;
 
+	/* The timer block may still be held in reset by the 2nd bootloader. */
+	nx_rstcon_setrst(RESET_ID_TIMER, RSTCON_ASSERT);
+	nx_rstcon_setrst(RESET_ID_TIMER, RSTCON_NEGATE);
+
 	timer_stop(base, ch);
 	timer_clock(base, ch, tmux, tscl);
 	timer_count(base, ch, tcnt);

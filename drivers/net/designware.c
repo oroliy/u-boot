@@ -575,8 +575,17 @@ int designware_eth_init(struct dw_eth_dev *priv, u8 *enetaddr)
 	rx_descs_init(priv);
 	tx_descs_init(priv);
 
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+	/* Match kernel/vendor Nexell GMAC DMA initialization. */
+	writel(0, &dma_p->intenable);
+	writel(NEXELL_DMA_BUSMODE, &dma_p->busmode);
+#else
 	writel(FIXEDBURST | PRIORXTX_41 | DMA_PBL, &dma_p->busmode);
+#endif
 
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+	writel(NEXELL_DMA_OPMODE, &dma_p->opmode);
+#else
 #ifndef CONFIG_DW_MAC_FORCE_THRESHOLD_MODE
 	writel(readl(&dma_p->opmode) | FLUSHTXFIFO | STOREFORWARD,
 	       &dma_p->opmode);
@@ -584,11 +593,25 @@ int designware_eth_init(struct dw_eth_dev *priv, u8 *enetaddr)
 	writel(readl(&dma_p->opmode) | FLUSHTXFIFO,
 	       &dma_p->opmode);
 #endif
+#endif
 
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+	/*
+	 * The Nexell reference driver starts RX during DMA setup and starts TX
+	 * only after the first descriptor has been handed to the DMA engine.
+	 * Starting TX here leaves the engine in TX-buffer-unavailable state.
+	 */
+	writel(readl(&dma_p->opmode) | RXSTART, &dma_p->opmode);
+#else
 	writel(readl(&dma_p->opmode) | RXSTART | TXSTART, &dma_p->opmode);
+#endif
 
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+	writel(NEXELL_DMA_AXI_BUS, &dma_p->axibus);
+#else
 #ifdef CONFIG_DW_AXI_BURST_LEN
 	writel((CONFIG_DW_AXI_BURST_LEN & 0x1FF >> 1), &dma_p->axibus);
+#endif
 #endif
 
 	/* Start up the PHY */
@@ -619,6 +642,46 @@ int designware_eth_enable(struct dw_eth_dev *priv)
 }
 
 #define ETH_ZLEN	60
+
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+static void dw_nexell_tx_debug(struct dw_eth_dev *priv, u32 desc_num)
+{
+	struct eth_dma_regs *dma_p = priv->dma_regs_p;
+	struct dmamacdescr *desc_p = &priv->tx_mac_descrtable[desc_num];
+	ulong desc_start = (ulong)desc_p;
+	ulong desc_end = desc_start +
+		roundup(sizeof(*desc_p), ARCH_DMA_MINALIGN);
+	u32 mac_hi = readl(&priv->mac_regs_p->macaddr0hi);
+	u32 mac_lo = readl(&priv->mac_regs_p->macaddr0lo);
+
+	if (priv->tx_debug_logged)
+		return;
+	priv->tx_debug_logged = 1;
+
+	/* Give the polled DMA engine a chance to consume the descriptor. */
+	udelay(100);
+	invalidate_dcache_range(desc_start, desc_end);
+
+	printf("x6818: GMAC MAC reg=%02x:%02x:%02x:%02x:%02x:%02x\n",
+	       mac_lo & 0xff, (mac_lo >> 8) & 0xff,
+	       (mac_lo >> 16) & 0xff, (mac_lo >> 24) & 0xff,
+	       mac_hi & 0xff, (mac_hi >> 8) & 0xff);
+	printf("x6818: GMAC tx desc[%u] cpu=%08lx status=0x%08x "
+	       "ctl=0x%08x buf=0x%08x next=0x%08x\n",
+	       desc_num, (ulong)desc_p, desc_p->txrx_status,
+	       desc_p->dmamac_cntl, desc_p->dmamac_addr,
+	       desc_p->dmamac_next);
+	printf("x6818: GMAC DMA bus=0x%08x opmode=0x%08x status=0x%08x "
+	       "axi=0x%08x txbase=0x%08x rxbase=0x%08x "
+	       "curtx=0x%08x curtxbuf=0x%08x\n",
+	       readl(&dma_p->busmode), readl(&dma_p->opmode),
+	       readl(&dma_p->status), readl(&dma_p->axibus),
+	       readl(&dma_p->txdesclistaddr),
+	       readl(&dma_p->rxdesclistaddr),
+	       readl(&dma_p->currhosttxdesc),
+	       readl(&dma_p->currhosttxbuffaddr));
+}
+#endif
 
 static int _dw_eth_send(struct dw_eth_dev *priv, void *packet, int length)
 {
@@ -653,6 +716,7 @@ static int _dw_eth_send(struct dw_eth_dev *priv, void *packet, int length)
 	}
 
 	/* Flush data to be sent */
+	data_end = data_start + roundup(length, ARCH_DMA_MINALIGN);
 	flush_dcache_range(data_start, data_end);
 
 #if defined(CONFIG_DW_ALTDESCRIPTOR)
@@ -682,7 +746,14 @@ static int _dw_eth_send(struct dw_eth_dev *priv, void *packet, int length)
 	priv->tx_currdescnum = desc_num;
 
 	/* Start the transmission */
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+	setbits_le32(&dma_p->opmode, TXSTART);
+	writel(0, &dma_p->txpolldemand);
+	dw_nexell_tx_debug(priv, desc_num == 0 ? CFG_TX_DESCR_NUM - 1 :
+						 desc_num - 1);
+#else
 	writel(POLL_DATA, &dma_p->txpolldemand);
+#endif
 
 	return 0;
 }
@@ -796,9 +867,53 @@ static int designware_eth_start(struct udevice *dev)
 	struct dw_eth_dev *priv = dev_get_priv(dev);
 	int ret;
 
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+	if (priv->phydev) {
+		int id1 = phy_read(priv->phydev, MDIO_DEVAD_NONE, MII_PHYSID1);
+		int id2 = phy_read(priv->phydev, MDIO_DEVAD_NONE, MII_PHYSID2);
+		int bmcr = phy_read(priv->phydev, MDIO_DEVAD_NONE, MII_BMCR);
+		int bmsr = phy_read(priv->phydev, MDIO_DEVAD_NONE, MII_BMSR);
+		int phystat = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x11);
+
+		printf("x6818: GMAC pre-start PHY addr=%d id=0x%04x:0x%04x "
+		       "bmcr=0x%04x bmsr=0x%04x stat11=0x%04x conf=0x%08x\n",
+		       priv->phydev->addr, id1 & 0xffff, id2 & 0xffff,
+		       bmcr & 0xffff, bmsr & 0xffff, phystat & 0xffff,
+		       readl(&priv->mac_regs_p->conf));
+	}
+#endif
+
 	ret = designware_eth_init(priv, pdata->enetaddr);
-	if (ret)
+	if (ret) {
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+		printf("x6818: GMAC start failed=%d conf=0x%08x dma_status=0x%08x "
+		       "miiaddr=0x%08x\n", ret,
+		       readl(&priv->mac_regs_p->conf),
+		       readl(&priv->dma_regs_p->status),
+		       readl(&priv->mac_regs_p->miiaddr));
+#endif
 		return ret;
+	}
+
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+	if (priv->phydev) {
+		int bmcr = phy_read(priv->phydev, MDIO_DEVAD_NONE, MII_BMCR);
+		int bmsr = phy_read(priv->phydev, MDIO_DEVAD_NONE, MII_BMSR);
+		int phystat = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x11);
+
+		printf("x6818: GMAC link=%d speed=%d duplex=%d conf=0x%08x "
+		       "dma=0x%08x bus=0x%08x opmode=0x%08x axi=0x%08x "
+		       "PHY bmcr=0x%04x bmsr=0x%04x stat11=0x%04x\n",
+		       priv->phydev->link, priv->phydev->speed,
+		       priv->phydev->duplex, readl(&priv->mac_regs_p->conf),
+		       readl(&priv->dma_regs_p->status),
+		       readl(&priv->dma_regs_p->busmode),
+		       readl(&priv->dma_regs_p->opmode),
+		       readl(&priv->dma_regs_p->axibus),
+		       bmcr & 0xffff, bmsr & 0xffff, phystat & 0xffff);
+	}
+#endif
+
 	ret = designware_eth_enable(priv);
 	if (ret)
 		return ret;

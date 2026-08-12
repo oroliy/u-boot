@@ -84,8 +84,12 @@ struct eth_dma_regs {
 
 #define DW_DMA_BASE_OFFSET	(0x1000)
 
-/* DMA Burst length */
+/* DMA Burst length. S5P6818's GMAC uses the vendor PBL value of 16. */
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+#define GMAC_DEFAULT_DMA_PBL	16
+#else
 #define GMAC_DEFAULT_DMA_PBL	8
+#endif
 
 /* Bus mode register definitions */
 #define FIXEDBURST		(1 << 16)
@@ -96,6 +100,13 @@ struct eth_dma_regs {
 #define DMA_PBL			(GMAC_DEFAULT_DMA_PBL << 8)
 #define RXHIGHPRIO		(1 << 1)
 #define DMAMAC_SRST		(1 << 0)
+
+/* The S5P6818 GMAC uses the settings from the Nexell reference driver. */
+#ifdef CONFIG_ETH_DESIGNWARE_NEXELL
+#define NEXELL_DMA_BUSMODE	((1 << 24) | (16 << 17) | (16 << 8))
+#define NEXELL_DMA_AXI_BUS	((3 << 20) | (3 << 16))
+#define NEXELL_DMA_OPMODE	(1 << 14)
+#endif
 
 /* Poll demand definitions */
 #define POLL_DATA		(0xFFFFFFFF)
@@ -247,6 +258,7 @@ struct dw_eth_dev {
 	struct udevice *dev;
 	struct phy_device *phydev;
 	struct mii_dev *bus;
+	unsigned int tx_debug_logged;
 };
 
 int designware_eth_of_to_plat(struct udevice *dev);

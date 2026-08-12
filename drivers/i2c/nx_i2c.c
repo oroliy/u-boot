@@ -8,6 +8,7 @@
 #include <asm/arch/clk.h>
 #include <asm/arch/nx_gpio.h>
 #include <linux/delay.h>
+#include <linux/err.h>
 
 #define I2C_WRITE       0
 #define I2C_READ        1
@@ -80,7 +81,7 @@ static void i2c_reset(int ch)
 	nx_rstcon_setrst(rst_id, 1);
 }
 
-static uint i2c_get_clkrate(struct nx_i2c_bus *bus)
+static unsigned long i2c_get_clkrate(struct nx_i2c_bus *bus)
 {
 	struct clk *clk;
 	int index = bus->bus_num;
@@ -88,8 +89,10 @@ static uint i2c_get_clkrate(struct nx_i2c_bus *bus)
 
 	sprintf(name, "%s.%d", DEV_NAME_I2C, index);
 	clk = clk_get((const char *)name);
-	if (!clk)
-		return -1;
+	if (IS_ERR_OR_NULL(clk)) {
+		debug("%s(): clk_get(%s) error\n", __func__, name);
+		return 0;
+	}
 
 	return clk_get_rate(clk);
 }
@@ -101,7 +104,7 @@ static uint i2c_set_clk(struct nx_i2c_bus *bus, uint enb)
 
 	sprintf(name, "%s.%d", DEV_NAME_I2C, bus->bus_num);
 	clk = clk_get((const char *)name);
-	if (!clk) {
+	if (IS_ERR_OR_NULL(clk)) {
 		debug("%s(): clk_get(%s) error!\n",
 		      __func__, (const char *)name);
 		return -EINVAL;
@@ -119,16 +122,19 @@ static uint i2c_set_clk(struct nx_i2c_bus *bus, uint enb)
 static int nx_i2c_set_sda_delay(struct nx_i2c_bus *bus)
 {
 	struct nx_i2c_regs *i2c = bus->regs;
-	uint pclk = 0;
-	uint t_pclk = 0;
+	unsigned long pclk;
+	unsigned long t_pclk;
 	uint delay = 0;
 
 	/* get input clock of the I2C-controller */
 	pclk = i2c_get_clkrate(bus);
+	if (!pclk) {
+		debug("%s(): I2C clock rate is unavailable\n", __func__);
+		return -EINVAL;
+	}
+	t_pclk = DIV_ROUND_UP(1000000000UL, pclk);
 
 	if (bus->sda_delay) {
-		/* t_pclk = period time of one pclk [ns] */
-		t_pclk = DIV_ROUND_UP(1000, pclk / 1000000);
 		/* delay = number of pclks required for sda_delay [ns] */
 		delay = DIV_ROUND_UP(bus->sda_delay, t_pclk);
 		/* delay = register value (step of 5 clocks) */
@@ -136,12 +142,14 @@ static int nx_i2c_set_sda_delay(struct nx_i2c_bus *bus)
 		/* max. possible register value = 3 */
 		if (delay > SDADLY_MAX) {
 			delay = SDADLY_MAX;
-			debug("%s(): sda-delay des.: %dns, sat. to max.: %dns (granularity: %dns)\n",
-			      __func__, bus->sda_delay, t_pclk * delay * SDADLY_CLKSTEP,
+			debug("%s(): sda-delay des.: %uns, sat. to max.: %luns (granularity: %luns)\n",
+			      __func__, bus->sda_delay,
+			      t_pclk * delay * SDADLY_CLKSTEP,
 			      t_pclk * SDADLY_CLKSTEP);
 		} else {
-			debug("%s(): sda-delay des.: %dns, act.: %dns (granularity: %dns)\n",
-			      __func__, bus->sda_delay, t_pclk * delay * SDADLY_CLKSTEP,
+			debug("%s(): sda-delay des.: %uns, act.: %luns (granularity: %luns)\n",
+			      __func__, bus->sda_delay,
+			      t_pclk * delay * SDADLY_CLKSTEP,
 			      t_pclk * SDADLY_CLKSTEP);
 		}
 
@@ -163,12 +171,21 @@ static int nx_i2c_set_bus_speed(struct udevice *dev, uint speed)
 	struct nx_i2c_bus *bus = dev_get_priv(dev);
 	struct nx_i2c_regs *i2c = bus->regs;
 	unsigned long pclk, pres = 16, div;
+	int ret;
+
+	if (!speed)
+		return -EINVAL;
 
 	if (i2c_set_clk(bus, 1))
 		return -EINVAL;
 
 	/* get input clock of the I2C-controller */
 	pclk = i2c_get_clkrate(bus);
+	if (!pclk) {
+		debug("%s(): I2C clock rate is unavailable\n", __func__);
+		i2c_set_clk(bus, 0);
+		return -EINVAL;
+	}
 
 	/* calculate prescaler and divisor values */
 	if ((pclk / pres / (16 + 1)) > speed)
@@ -205,11 +222,16 @@ static int nx_i2c_set_bus_speed(struct udevice *dev, uint speed)
 	      __func__, speed, bus->speed);
 
 #ifdef CONFIG_ARCH_S5P6818
-	nx_i2c_set_sda_delay(bus);
+	ret = nx_i2c_set_sda_delay(bus);
 #else
 	/* setup time for Stop condition [us], min. 4us @ 100kHz I2C-clock */
 	bus->tsu_stop = DIV_ROUND_UP(400, bus->speed / 1000);
+	ret = 0;
 #endif
+	if (ret) {
+		i2c_set_clk(bus, 0);
+		return ret;
+	}
 
 	if (i2c_set_clk(bus, 0))
 		return -EINVAL;
@@ -309,34 +331,34 @@ static void i2c_send_stop(struct nx_i2c_bus *bus)
 {
 	struct nx_i2c_regs *i2c = bus->regs;
 
-	if (IS_ENABLED(CONFIG_ARCH_S5P6818)) {
-		unsigned int reg;
+#ifdef CONFIG_ARCH_S5P6818
+	unsigned int reg;
 
-		reg = readl(&i2c->iicstat);
-		reg |= I2CSTAT_MRM | I2CSTAT_RXTXEN;
-		reg &= (~I2CSTAT_SS);
+	reg = readl(&i2c->iicstat);
+	reg |= I2CSTAT_MRM | I2CSTAT_RXTXEN;
+	reg &= (~I2CSTAT_SS);
 
-		writel(reg, &i2c->iicstat);
-		i2c_clear_irq(i2c);
-	} else {  /* S5P4418 */
-		writel(STOPCON_NAG, &i2c->iicstopcon);
+	writel(reg, &i2c->iicstat);
+	i2c_clear_irq(i2c);
+#else /* S5P4418 */
+	writel(STOPCON_NAG, &i2c->iicstopcon);
 
-		i2c_clear_irq(i2c);
+	i2c_clear_irq(i2c);
 
 		/*
 		 * Clock Line Release --> SDC changes from Low to High and
 		 * SDA from High to Low
 		 */
-		writel(STOPCON_CLR, &i2c->iicstopcon);
+	writel(STOPCON_CLR, &i2c->iicstopcon);
 
-		/* Hold SDA Low (Setup Time for Stop condition) */
-		udelay(bus->tsu_stop);
+	/* Hold SDA Low (Setup Time for Stop condition) */
+	udelay(bus->tsu_stop);
 
-		i2c_clear_irq(i2c);
+	i2c_clear_irq(i2c);
 
-		/* Master Receive Mode Stop --> SDA becomes High */
-		writel(I2CSTAT_MRM, &i2c->iicstat);
-	}
+	/* Master Receive Mode Stop --> SDA becomes High */
+	writel(I2CSTAT_MRM, &i2c->iicstat);
+#endif
 }
 
 static int wait_for_xfer(struct nx_i2c_regs *i2c)

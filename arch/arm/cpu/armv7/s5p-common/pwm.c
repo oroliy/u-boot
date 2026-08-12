@@ -7,9 +7,46 @@
 
 #include <config.h>
 #include <errno.h>
+#include <linux/err.h>
+#include <stdio.h>
 #include <asm/io.h>
 #include <asm/arch/pwm.h>
 #include <asm/arch/clk.h>
+#if defined(CONFIG_ARCH_NEXELL)
+#include <asm/arch/nexell.h>
+#include <asm/arch/reset.h>
+#endif
+
+#if defined(CONFIG_ARCH_NEXELL)
+static struct clk *s5p_pwm_get_clk(int pwm_id)
+{
+	char name[16];
+
+	snprintf(name, sizeof(name), "%s.%d", DEV_NAME_PWM, pwm_id);
+	return clk_get(name);
+}
+
+/* The vendor PWM path releases reset and enables CLKGEN13 before touching PWM. */
+static int s5p_pwm_prepare(int pwm_id)
+{
+	struct clk *clk;
+	int rate;
+
+	clk = s5p_pwm_get_clk(pwm_id);
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
+
+	nx_rstcon_setrst(RESET_ID_PWM, RSTCON_ASSERT);
+	nx_rstcon_setrst(RESET_ID_PWM, RSTCON_NEGATE);
+
+	/* 25 MHz gives a 3.125 MHz PWM input after the /8 prescaler. */
+	rate = clk_set_rate(clk, 25000000);
+	if (rate < 0)
+		return rate;
+
+	return clk_enable(clk);
+}
+#endif
 
 int s5p_pwm_enable(int pwm_id)
 {
@@ -55,7 +92,10 @@ static unsigned long pwm_calc_tin(int pwm_id, unsigned long freq)
 	const struct s5p_timer *pwm =
 		(struct s5p_timer *)PHY_BASEADDR_PWM;
 	unsigned int val;
-	struct clk *clk = clk_get(CORECLK_NAME_PCLK);
+	struct clk *clk = s5p_pwm_get_clk(pwm_id);
+
+	if (IS_ERR(clk))
+		return 0;
 
 	tin_parent_rate = clk_get_rate(clk);
 #else
@@ -63,7 +103,6 @@ static unsigned long pwm_calc_tin(int pwm_id, unsigned long freq)
 #endif
 
 #if defined(CONFIG_ARCH_NEXELL)
-	writel(0, &pwm->tcfg0);
 	val = readl(&pwm->tcfg0);
 
 	if (pwm_id < 2)
@@ -71,10 +110,12 @@ static unsigned long pwm_calc_tin(int pwm_id, unsigned long freq)
 	else
 		div = ((val >> 8) & 0xff) + 1;
 
-	writel(0, &pwm->tcfg1);
 	val = readl(&pwm->tcfg1);
 	val = (val >> MUX_DIV_SHIFT(pwm_id)) & 0xF;
 	pre_div = (1UL << val);
+
+	if (!tin_parent_rate)
+		return 0;
 
 	freq = tin_parent_rate / div / pre_div;
 
@@ -122,8 +163,12 @@ int s5p_pwm_config(int pwm_id, int duty_ns, int period_ns)
 
 	/* Check to see if we are changing the clock rate of the PWM */
 	tin_rate = pwm_calc_tin(pwm_id, frequency);
+	if (!tin_rate)
+		return -EINVAL;
 
 	tin_ns = NS_IN_SEC / tin_rate;
+	if (!tin_ns)
+		return -ERANGE;
 
 	if (IS_ENABLED(CONFIG_ARCH_NEXELL))
 		/* The counter starts at zero. */
@@ -168,6 +213,13 @@ int s5p_pwm_init(int pwm_id, int div, int invert)
 	unsigned long ticks_per_period;
 	unsigned int offset, prescaler;
 
+#if defined(CONFIG_ARCH_NEXELL)
+	int ret = s5p_pwm_prepare(pwm_id);
+
+	if (ret)
+		return ret;
+#endif
+
 	/*
 	 * Timer Freq(HZ) =
 	 *	PWM_CLK / { (prescaler_value + 1) * (divider_value) }
@@ -198,7 +250,9 @@ int s5p_pwm_init(int pwm_id, int div, int invert)
 	} else {
 		const unsigned long pwm_hz = 1000;
 #if defined(CONFIG_ARCH_NEXELL)
-		struct clk *clk = clk_get(CORECLK_NAME_PCLK);
+		struct clk *clk = s5p_pwm_get_clk(pwm_id);
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
 		unsigned long timer_rate_hz = clk_get_rate(clk) /
 #else
 		unsigned long timer_rate_hz = get_pwm_clk() /

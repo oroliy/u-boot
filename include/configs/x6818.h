@@ -1,10 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0+
  *
- * Nexell S5P6818 x6818 board config (AArch32, headless).
+ * Nexell S5P6818 x6818 board config (AArch32).
  *
  * Trimmed from include/configs/s5p4418_nanopi2.h; RAM map corrected to the
- * x6818 (1 GB @ 0x40000000) and the environment simplified to a headless
- * zImage + dtb boot.
+ * x6818 (1 GB @ 0x40000000).
  */
 
 #ifndef __CONFIG_H__
@@ -23,11 +22,7 @@
 #define BMP_LOAD_ADDR			0x78000000
 #define INITRD_START			0x49000000
 #define KERNEL_DTB_ADDR			0x4A000000
-
-/*-----------------------------------------------------------------------
- * serial console: UART0 @ 0xC00A1000, clock set by SPL/2ndboot = 150 MHz
- */
-#define CFG_PL011_CLOCK			150000000
+#define SPLASH_ADDR			BMP_LOAD_ADDR
 
 /*-----------------------------------------------------------------------
  * ENV
@@ -47,16 +42,38 @@
 	"initrd_name=ramdisk.img\0"				\
 	"initrd_addr=" __stringify(INITRD_START) "\0"		\
 	"initrd_size=0x600000\0"				\
+	"ethact=dwmac.c0060000\0"				\
+	"ethprime=RTL8211\0"				\
+	"ethaddr=00:e2:1c:ba:e8:60\0"				\
+	"ipaddr=10.1.1.99\0"				\
+	"serverip=10.1.1.100\0"				\
+	"netmask=255.255.255.0\0"				\
+	"gatewayip=10.1.1.1\0"				\
+	"legacy_kernel_block=0x5000\0"				\
+	"legacy_kernel_sectors=0x3000\0"				\
 	"load_dtb="						\
-		BLOADER_MMC "${dtb_addr} ${dtb_name}; "		\
+		BLOADER_MMC "${dtb_addr} ${dtb_name}\0"		\
 	"load_kernel="						\
 		BLOADER_MMC "${loadaddr} ${kernel}\0"		\
 	"load_initrd="						\
-		BLOADER_MMC "${initrd_addr} ${initrd_name}; "	\
-		"setenv initrd_size 0x${filesize}\0"		\
+			BLOADER_MMC "${initrd_addr} ${initrd_name}; "	\
+			"setenv initrd_size 0x${filesize}\0"		\
+	"legacy_mmcboot="						\
+			"echo Booting legacy uImage from mmc ${rootdev} ...; "\
+			"mmc dev ${rootdev}; "					\
+			"mmc read ${loadaddr} ${legacy_kernel_block} "\
+				"${legacy_kernel_sectors}; "				\
+			"bootm ${loadaddr}\0"					\
 	"mmcboot="						\
-		"run load_kernel; run load_dtb; "		\
-		"bootz ${loadaddr} - ${dtb_addr}\0"		\
+			"echo Booting from mmc ${rootdev}:${rootpart} ...; " \
+			"if fstype mmc ${rootdev}:${bootpart}; then "\
+				"if run load_kernel && run load_dtb; then "\
+					"bootz ${loadaddr} - ${dtb_addr}; " \
+				"else "						\
+					"run legacy_mmcboot; "				"fi; "\
+			"else "							\
+				"run legacy_mmcboot; "					\
+			"fi\0"						\
 	"bootcmd=run mmcboot\0"
 
 #endif /* __CONFIG_H__ */

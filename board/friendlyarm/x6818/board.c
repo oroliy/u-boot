@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Nexell S5P6818 x6818 board init (AArch32, headless).
+ * Nexell S5P6818 x6818 board init (AArch32).
  *
  * Trimmed from board/friendlyarm/nanopi2/board.c: keeps the Nexell
- * DDR-info-register RAM detection and the SD-vs-eMMC boot-device decode,
- * drops all display/onewire/backlight/splash code.
+ * DDR-info-register RAM detection. Display and splash setup are described by
+ * the board DT and the x6818 display glue.
   */
 
 #include <config.h>
 #include <command.h>
+#include <dm.h>
 #include <fdt_support.h>
 #include <log.h>
+#include <phy.h>
+#include <video.h>
 #include <asm/global_data.h>
 #include <asm/io.h>
 
@@ -18,8 +21,17 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-/* DEFAULT mmc dev for eMMC boot (dwmmc.2) */
-static int mmc_boot_dev;
+/* The vendor x6818 U-Boot boots the OS from eMMC, dwmmc.2. */
+static int mmc_boot_dev = CONFIG_ENV_MMC_DEVICE_INDEX;
+
+/* Keep the splash path independent of saved U-Boot environment variables. */
+#define X6818_SPLASH_LOAD_CMD \
+	"ext4load mmc 2:1 0x78000000 logo.bmp"
+#define X6818_SPLASH_SHOW_CMD "bmp display 0x78000000"
+
+int x6818_display_builtin_logo(struct udevice *dev);
+int x6818_display_power_on(void);
+int x6818_display_enable_backlight(void);
 
 int board_mmc_bootdev(void)
 {
@@ -32,6 +44,30 @@ int mmc_get_env_dev(void)
 	return mmc_boot_dev;
 }
 
+/*
+ * The x6818 board uses the RTL8211E's strap-selected RGMII delays.  The
+ * modern generic driver programs the extended delay register for plain
+ * "rgmii" and clears those strap values, while the vendor U-Boot only reset
+ * the PHY and started autonegotiation.  Preserve the vendor behaviour here.
+ */
+#define X6818_RTL8211E_PHY_ID		0x001cc915
+#define X6818_RTL8211E_PHY_ID_MASK	0x00ffffff
+
+int board_phy_config(struct phy_device *phydev)
+{
+	if ((phydev->phy_id & X6818_RTL8211E_PHY_ID_MASK) ==
+	    X6818_RTL8211E_PHY_ID) {
+		printf("x6818: RTL8211E preserving strap RGMII delays\n");
+		phy_write(phydev, MDIO_DEVAD_NONE, MII_BMCR, BMCR_RESET);
+		return genphy_config_aneg(phydev);
+	}
+
+	if (phydev->drv && phydev->drv->config)
+		return phydev->drv->config(phydev);
+
+	return 0;
+}
+
 #ifdef CONFIG_DISPLAY_BOARDINFO
 int checkboard(void)
 {
@@ -40,25 +76,6 @@ int checkboard(void)
 }
 #endif
 
-/* -------------------------------------------------------------------------- */
-
-#define	MMC_BOOT_CH0		(0)
-#define	MMC_BOOT_CH1		(1 <<  3)
-#define	MMC_BOOT_CH2		(1 << 19)
-
-static void bd_bootdev_init(void)
-{
-	unsigned int rst = readl(PHY_BASEADDR_CLKPWR + SYSRSTCONFIG);
-
-	rst &= (1 << 19) | (1 << 3);
-	if (rst == MMC_BOOT_CH0) {
-		/* mmc dev 1 for SD boot */
-		mmc_boot_dev = 1;
-	}
-}
-
-/* -------------------------------------------------------------------------- */
-
 int board_early_init_f(void)
 {
 	return 0;
@@ -66,8 +83,6 @@ int board_early_init_f(void)
 
 int board_init(void)
 {
-	bd_bootdev_init();
-
 	if (IS_ENABLED(CONFIG_SILENT_CONSOLE))
 		gd->flags |= GD_FLG_SILENT;
 
@@ -77,8 +92,52 @@ int board_init(void)
 #ifdef CONFIG_BOARD_LATE_INIT
 int board_late_init(void)
 {
+	struct udevice *video = NULL;
+	int ret;
+
 	if (IS_ENABLED(CONFIG_SILENT_CONSOLE))
 		gd->flags &= ~GD_FLG_SILENT;
+
+	/* Probe the panel before the splash file can affect display init. */
+	if (IS_ENABLED(CONFIG_VIDEO)) {
+		ret = x6818_display_power_on();
+		if (ret)
+			printf("x6818: LCD power init failed (%d)\n", ret);
+
+		ret = uclass_first_device_err(UCLASS_VIDEO, &video);
+		if (ret)
+			printf("x6818: display init failed (%d)\n", ret);
+		else {
+			ret = x6818_display_enable_backlight();
+			if (ret)
+				printf("x6818: backlight init failed (%d)\n", ret);
+		}
+	}
+
+	/* Load and show the splash before autoboot can be interrupted. */
+	if (video && IS_ENABLED(CONFIG_CMD_EXT4) && IS_ENABLED(CONFIG_CMD_BMP)) {
+		ret = run_command(X6818_SPLASH_LOAD_CMD, 0);
+		if (!ret) {
+			ret = run_command(X6818_SPLASH_SHOW_CMD, 0);
+			if (!ret)
+				printf("x6818: logo.bmp displayed\n");
+		}
+
+		if (ret) {
+			printf("x6818: logo.bmp unavailable, using built-in logo\n");
+			ret = x6818_display_builtin_logo(video);
+			if (ret)
+				printf("x6818: built-in logo failed (%d)\n", ret);
+			else
+				printf("x6818: built-in logo displayed\n");
+		}
+	} else if (video) {
+		ret = x6818_display_builtin_logo(video);
+		if (ret)
+			printf("x6818: built-in logo failed (%d)\n", ret);
+		else
+			printf("x6818: built-in logo displayed\n");
+	}
 
 	return 0;
 }

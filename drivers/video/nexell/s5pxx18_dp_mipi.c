@@ -7,7 +7,13 @@
 
 #include <config.h>
 #include <errno.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
+#include <linux/types.h>
+#include <log.h>
+#include <stdio.h>
 
+#include <asm/io.h>
 #include <asm/arch/nexell.h>
 #include <asm/arch/tieoff.h>
 #include <asm/arch/reset.h>
@@ -16,6 +22,8 @@
 #include "soc/s5pxx18_soc_mipi.h"
 #include "soc/s5pxx18_soc_disptop.h"
 #include "soc/s5pxx18_soc_disptop_clk.h"
+#include "soc/s5pxx18_soc_dpc.h"
+#include "soc/s5pxx18_soc_mlc.h"
 
 #define	PLLPMS_1000MHZ		0x33E8
 #define	BANDCTL_1000MHZ		0xF
@@ -57,7 +65,7 @@
 #define	BANDCTL_80MHZ		0x0
 
 #define	MIPI_INDEX		0
-#define MIPI_EXC_PRE_VALUE      1
+#define MIPI_ESC_PRE_VALUE	1
 #define MIPI_DSI_IRQ_MASK       29
 
 #define	__io_address(a)	(void *)(uintptr_t)(a)
@@ -86,6 +94,7 @@ static void mipi_reset(void)
 
 	nx_rstcon_setrst(RESET_ID_MIPI, RSTCON_NEGATE);
 	nx_rstcon_setrst(RESET_ID_MIPI_DSI, RSTCON_NEGATE);
+	nx_rstcon_setrst(RESET_ID_MIPI_CSI, RSTCON_NEGATE);
 	nx_rstcon_setrst(RESET_ID_MIPI_PHY_S, RSTCON_NEGATE);
 	nx_rstcon_setrst(RESET_ID_MIPI_PHY_M, RSTCON_NEGATE);
 }
@@ -94,6 +103,7 @@ static void mipi_init(void)
 {
 	int clkid = DP_CLOCK_MIPI;
 	void *base;
+	struct nx_mipi_register_set *regs;
 
 	/*
 	 * neet to reset before open
@@ -106,6 +116,11 @@ static void mipi_init(void)
 
 	base = __io_address(nx_mipi_get_physical_address(0));
 	nx_mipi_set_base_address(0, base);
+
+	/* Match the vendor NX_MIPI_OpenModule() D-PHY analog setup. */
+	regs = nx_mipi_get_base_address(0);
+	writel(0, &regs->csis_dphyctrl_1);
+	writel(22 << 24, &regs->csis_dphyctrl);
 }
 
 static int mipi_get_phy_pll(int bitrate, unsigned int *pllpms,
@@ -200,12 +215,74 @@ static int mipi_get_phy_pll(int bitrate, unsigned int *pllpms,
 	return 0;
 }
 
+static int mipi_set_phy_lanes(int index, unsigned int lanes)
+{
+	switch (lanes) {
+	case 1:
+		nx_mipi_dsi_set_phy(index, 0, 1, 1, 0, 0, 0, 0, 0);
+		break;
+	case 2:
+		nx_mipi_dsi_set_phy(index, 1, 1, 1, 1, 0, 0, 0, 0);
+		break;
+	case 3:
+		nx_mipi_dsi_set_phy(index, 2, 1, 1, 1, 1, 0, 0, 0);
+		break;
+	case 4:
+		nx_mipi_dsi_set_phy(index, 3, 1, 1, 1, 1, 1, 0, 0);
+		break;
+	default:
+		printf("%s: not support data lanes %u\n", __func__, lanes);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int mipi_set_video_mode(int index, struct dp_sync_info *sync,
+			       struct mipi_dsi_device *dsi)
+{
+	enum nx_mipi_dsi_format dsi_format;
+	bool burst = dsi->mode_flags & MIPI_DSI_MODE_VIDEO_BURST;
+	bool eot_enable = !(dsi->mode_flags & MIPI_DSI_MODE_EOT_PACKET);
+
+	switch (dsi->format) {
+	case MIPI_DSI_FMT_RGB565:
+		dsi_format = nx_mipi_dsi_format_rgb565;
+		break;
+	case MIPI_DSI_FMT_RGB666:
+		dsi_format = nx_mipi_dsi_format_rgb666;
+		break;
+	case MIPI_DSI_FMT_RGB666_PACKED:
+		dsi_format = nx_mipi_dsi_format_rgb666_packed;
+		break;
+	case MIPI_DSI_FMT_RGB888:
+		dsi_format = nx_mipi_dsi_format_rgb888;
+		break;
+	default:
+		printf("%s: not support format %d\n", __func__, dsi->format);
+		return -EINVAL;
+	}
+
+	nx_mipi_dsi_set_config_video_mode(index, 1, 0, burst,
+					  nx_mipi_dsi_syncmode_event,
+					  eot_enable, 1, 1, 1, 1, 0,
+					  dsi_format,
+					  sync->h_front_porch,
+					  sync->h_back_porch,
+					  sync->h_sync_width,
+					  sync->v_front_porch,
+					  sync->v_back_porch,
+					  sync->v_sync_width, 0);
+
+	return 0;
+}
+
 static int mipi_prepare(int module, int input,
 			struct dp_sync_info *sync, struct dp_ctrl_info *ctrl,
 			struct dp_mipi_dev *mipi)
 {
 	int index = MIPI_INDEX;
-	u32 esc_pre_value = MIPI_EXC_PRE_VALUE;
+	u32 esc_pre_value = MIPI_ESC_PRE_VALUE;
 	int lpm = mipi->lpm_trans;
 	int ret = 0;
 
@@ -224,12 +301,14 @@ static int mipi_prepare(int module, int input,
 	      mipi->hs_bitrate, mipi->hs_pllpms, mipi->hs_bandctl,
 	      lpm ? "low" : "high");
 
+	/* Match the vendor S5P6818 sequence used for panel DCS commands. */
 	if (lpm)
 		nx_mipi_dsi_set_pll(index, 1, 0xFFFFFFFF,
-				    mipi->lp_pllpms, mipi->lp_bandctl, 0, 0);
+				mipi->lp_pllpms, mipi->lp_bandctl, 0, 0);
 	else
 		nx_mipi_dsi_set_pll(index, 1, 0xFFFFFFFF,
-				    mipi->hs_pllpms, mipi->hs_bandctl, 0, 0);
+				mipi->hs_pllpms, mipi->hs_bandctl, 0, 0);
+	mdelay(20);
 
 #ifdef CONFIG_ARCH_S5P4418
 	/*
@@ -241,7 +320,8 @@ static int mipi_prepare(int module, int input,
 #endif
 
 	nx_mipi_dsi_software_reset(index);
-	nx_mipi_dsi_set_clock(index, 0, 0, 1, 1, 1, 0, 0, 0, 1, esc_pre_value);
+	nx_mipi_dsi_set_clock(index, 0, 0, 1, 1, 1, 0, 0, 0, 1,
+			      esc_pre_value);
 	nx_mipi_dsi_set_phy(index, 0, 1, 1, 0, 0, 0, 0, 0);
 
 	if (lpm)
@@ -264,24 +344,12 @@ static int mipi_enable(int module, int input,
 	int index = MIPI_INDEX;
 	int width = sync->h_active_len;
 	int height = sync->v_active_len;
-	int HFP = sync->h_front_porch;
-	int HBP = sync->h_back_porch;
-	int HS = sync->h_sync_width;
-	int VFP = sync->v_front_porch;
-	int VBP = sync->v_back_porch;
-	int VS = sync->v_sync_width;
+	u32 esc_pre_value = MIPI_ESC_PRE_VALUE;
 	int en_prescaler = 1;
-	u32 esc_pre_value = MIPI_EXC_PRE_VALUE;
 
-	int txhsclock = 1;
 	int lpm = mipi->lpm_trans;
 	bool command_mode = mipi->command_mode;
-
-	enum nx_mipi_dsi_format dsi_format;
-	int data_len = dsi->lanes - 1;
-	bool burst = dsi->mode_flags & MIPI_DSI_MODE_VIDEO_BURST ? true : false;
-	bool eot_enable = dsi->mode_flags & MIPI_DSI_MODE_EOT_PACKET ?
-	    false : true;
+	int ret;
 
 	/*
 	 * disable the escape clock generating prescaler
@@ -292,7 +360,7 @@ static int mipi_enable(int module, int input,
 #endif
 
 	debug("%s: mode:%s, lanes.%d\n", __func__,
-	      command_mode ? "command" : "video", data_len + 1);
+	      command_mode ? "command" : "video", dsi->lanes);
 
 	if (lpm)
 		nx_mipi_dsi_set_escape_lp(index,
@@ -307,63 +375,26 @@ static int mipi_enable(int module, int input,
 	mdelay(1);
 
 	nx_mipi_dsi_software_reset(index);
-	nx_mipi_dsi_set_clock(index, txhsclock, 0, 1,
-			      1, 1, 0, 0, 0, 1, esc_pre_value);
+	nx_mipi_dsi_set_clock(index, 1, 0, 1,
+			      1, 1, 1, 1, 1, 1, esc_pre_value);
 
-	switch (data_len) {
-	case 0:		/* 1 lane */
-		nx_mipi_dsi_set_phy(index, data_len, 1, 1, 0, 0, 0, 0, 0);
-		break;
-	case 1:		/* 2 lane */
-		nx_mipi_dsi_set_phy(index, data_len, 1, 1, 1, 0, 0, 0, 0);
-		break;
-	case 2:		/* 3 lane */
-		nx_mipi_dsi_set_phy(index, data_len, 1, 1, 1, 1, 0, 0, 0);
-		break;
-	case 3:		/* 3 lane */
-		nx_mipi_dsi_set_phy(index, data_len, 1, 1, 1, 1, 1, 0, 0);
-		break;
-	default:
-		printf("%s: not support data lanes %d\n",
-		       __func__, data_len + 1);
-		return -EINVAL;
-	}
+	ret = mipi_set_phy_lanes(index, dsi->lanes);
+	if (ret)
+		return ret;
 
-	switch (dsi->format) {
-	case MIPI_DSI_FMT_RGB565:
-		dsi_format = nx_mipi_dsi_format_rgb565;
-		break;
-	case MIPI_DSI_FMT_RGB666:
-		dsi_format = nx_mipi_dsi_format_rgb666;
-		break;
-	case MIPI_DSI_FMT_RGB666_PACKED:
-		dsi_format = nx_mipi_dsi_format_rgb666_packed;
-		break;
-	case MIPI_DSI_FMT_RGB888:
-		dsi_format = nx_mipi_dsi_format_rgb888;
-		break;
-	default:
-		printf("%s: not support format %d\n", __func__, dsi->format);
-		return -EINVAL;
-	}
-
-	nx_mipi_dsi_set_config_video_mode(index, 1, 0, burst,
-					  nx_mipi_dsi_syncmode_event,
-					  eot_enable, 1, 1, 1, 1, 0, dsi_format,
-					  HFP, HBP, HS, VFP, VBP, VS, 0);
+	ret = mipi_set_video_mode(index, sync, dsi);
+	if (ret)
+		return ret;
 
 	nx_mipi_dsi_set_size(index, width, height);
 
 	/* set mux */
 	nx_disp_top_set_mipimux(1, module);
 
-	/*  0 is spdif, 1 is mipi vclk */
+	/* 0 is SPDIF, 1 is the MIPI video clock. */
 	nx_disp_top_clkgen_set_clock_source(clkid, 1, ctrl->clk_src_lv0);
 	nx_disp_top_clkgen_set_clock_divisor(clkid, 1,
-					     ctrl->clk_div_lv1 *
-					     ctrl->clk_div_lv0);
-
-	/* SPDIF and MIPI */
+					     ctrl->clk_div_lv1 * ctrl->clk_div_lv0);
 	nx_disp_top_clkgen_set_clock_divisor_enable(clkid, 1);
 
 	/* START: CLKGEN, MIPI is started in setup function */
@@ -539,7 +570,7 @@ static int nx_mipi_transfer(struct mipi_dsi_device *dsi,
 			    const struct mipi_dsi_msg *msg)
 {
 	struct mipi_xfer_msg xfer;
-	int err;
+	int err, done;
 
 	if (!msg->tx_len)
 		return -EINVAL;
@@ -574,13 +605,15 @@ static int nx_mipi_transfer(struct mipi_dsi_device *dsi,
 	if (xfer.rx_len)
 		err = nx_mipi_transfer_rx(dsi, &xfer);
 
-	nx_mipi_transfer_done(dsi);
+	done = nx_mipi_transfer_done(dsi);
+	if (done < 0 && err >= 0)
+		err = done;
 
 	return err;
 }
 
 static ssize_t nx_mipi_write_buffer(struct mipi_dsi_device *dsi,
-				    const void *data, size_t len)
+					    const void *data, size_t len)
 {
 	struct mipi_dsi_msg msg = {
 		.channel = dsi->channel,
@@ -605,7 +638,95 @@ static ssize_t nx_mipi_write_buffer(struct mipi_dsi_device *dsi,
 	if (dsi->mode_flags & MIPI_DSI_MODE_LPM)
 		msg.flags |= MIPI_DSI_MSG_USE_LPM;
 
-	return nx_mipi_transfer(dsi, &msg);
+	{
+		int ret = nx_mipi_transfer(dsi, &msg);
+
+		/* Panel callbacks use the Linux write_buffer byte-count contract. */
+		return ret < 0 ? ret : (ssize_t)len;
+	}
+}
+
+static void nx_mipi_print_state(int module)
+{
+	struct nx_mipi_register_set *regs;
+	struct nx_disp_top_register_set *top_regs;
+	struct nx_disptop_clkgen_register_set *mipi_clkgen;
+	struct nx_dpc_register_set *dpc_regs;
+	struct nx_mlc_register_set *mlc_regs;
+	s32 hstride, vstride;
+	u32 fb_addr;
+	u32 status;
+	u32 pll_stable;
+	u32 in_reset;
+	u32 hs_clock_ready;
+
+	regs = nx_mipi_get_base_address(MIPI_INDEX);
+	if (!regs)
+		return;
+
+	mipi_clkgen = nx_disp_top_clkgen_get_base_address(to_mipi_clkgen);
+	dpc_regs = nx_dpc_get_base_address(module);
+	mlc_regs = nx_mlc_get_base_address(module);
+
+	status = readl(&regs->dsim_status);
+	nx_mipi_dsi_get_status(MIPI_INDEX, NULL, NULL, &pll_stable,
+			       &in_reset, NULL, &hs_clock_ready);
+	printf("MIPI: dp.%d active status=0x%08x pll=%u reset=%u hs_ready=%u "
+	       "clk=0x%08x cfg=0x%08x esc=0x%08x res=0x%08x\n",
+	       module, status, pll_stable, in_reset, hs_clock_ready,
+	       readl(&regs->dsim_clkctrl), readl(&regs->dsim_config),
+	       readl(&regs->dsim_escmode), readl(&regs->dsim_mdresol));
+
+	nx_mlc_get_rgblayer_address(module, 0, &fb_addr);
+	nx_mlc_get_rgblayer_stride(module, 0, &hstride, &vstride);
+	top_regs = nx_disp_top_get_base_address();
+	printf("MIPI: MLC top=%d layer0=%d dirty=%d primary=%u addr=0x%08x "
+	       "stride=%d/%d DPC enable=%d clk=%d src=%u/%u div=%u/%u "
+	       "mux=0x%08x\n",
+	       nx_mlc_get_mlc_enable(module),
+	       nx_mlc_get_layer_enable(module, 0),
+	       nx_mlc_get_dirty_flag(module, 0),
+	       top_regs ? readl(&top_regs->tftmpu_mux) : 0,
+	       fb_addr,
+	       hstride, vstride, nx_dpc_get_dpc_enable(module),
+	       nx_dpc_get_clock_divisor_enable(module),
+	       nx_dpc_get_clock_source(module, 0),
+	       nx_dpc_get_clock_source(module, 1),
+	       nx_dpc_get_clock_divisor(module, 0),
+	       nx_dpc_get_clock_divisor(module, 1),
+	       top_regs ? readl(&top_regs->mipi_mux_ctrl) : 0);
+	printf("MIPI: raw dphy=0x%08x/0x%08x pll2=0x%08x sscg2=0x%08x dvo5=0x%08x "
+	       "clkgen enb=0x%08x c0=0x%08x c1=0x%08x c2=0x%08x c3=0x%08x\n",
+	       regs ? readl(&regs->csis_dphyctrl) : 0,
+	       regs ? readl(&regs->csis_dphyctrl_1) : 0,
+	       readl(__io_address(PHY_BASEADDR_CLKPWR + 0x010)),
+	       readl(__io_address(PHY_BASEADDR_CLKPWR + 0x050)),
+	       readl(__io_address(PHY_BASEADDR_CLKPWR + 0x034)),
+	       mipi_clkgen ? readl(&mipi_clkgen->clkenb) : 0,
+	       mipi_clkgen ? readl(&mipi_clkgen->CLKGEN[0]) : 0,
+	       mipi_clkgen ? readl(&mipi_clkgen->CLKGEN[1]) : 0,
+	       mipi_clkgen ? readl(&mipi_clkgen->CLKGEN[2]) : 0,
+	       mipi_clkgen ? readl(&mipi_clkgen->CLKGEN[3]) : 0);
+	printf("MIPI: raw DPC ctrl=0x%08x/0x%08x/0x%08x "
+	       "ht=0x%08x hs=0x%08x ha=0x%08x vt=0x%08x "
+	       "vs=0x%08x va=0x%08x\n",
+	       dpc_regs ? readl(&dpc_regs->dpcctrl0) : 0,
+	       dpc_regs ? readl(&dpc_regs->dpcctrl1) : 0,
+	       dpc_regs ? readl(&dpc_regs->dpcctrl2) : 0,
+	       dpc_regs ? readl(&dpc_regs->dpchtotal) : 0,
+	       dpc_regs ? readl(&dpc_regs->dpchswidth) : 0,
+	       dpc_regs ? readl(&dpc_regs->dpchastart) : 0,
+	       dpc_regs ? readl(&dpc_regs->dpcvtotal) : 0,
+	       dpc_regs ? readl(&dpc_regs->dpcvswidth) : 0,
+	       dpc_regs ? readl(&dpc_regs->dpcvastart) : 0);
+	printf("MIPI: raw MLC top=0x%08x size=0x%08x layer=0x%08x "
+	       "addr=0x%08x hstride=0x%08x vstride=0x%08x\n",
+	       mlc_regs ? readl(&mlc_regs->mlccontrolt) : 0,
+	       mlc_regs ? readl(&mlc_regs->mlcscreensize) : 0,
+	       mlc_regs ? readl(&mlc_regs->mlcrgblayer[0].mlccontrol) : 0,
+	       mlc_regs ? readl(&mlc_regs->mlcrgblayer[0].mlcaddress) : 0,
+	       mlc_regs ? readl(&mlc_regs->mlcrgblayer[0].mlchstride) : 0,
+	       mlc_regs ? readl(&mlc_regs->mlcrgblayer[0].mlcvstride) : 0);
 }
 
 __weak int nx_mipi_dsi_lcd_bind(struct mipi_dsi_device *dsi)
@@ -660,17 +781,40 @@ void nx_mipi_display(int module,
 	dp_plane_screen_enable(module, 1);
 
 	/* set mipi */
-	mipi_prepare(module, input, sync, ctrl, dev);
+	ret = mipi_prepare(module, input, sync, ctrl, dev);
+	if (ret) {
+		printf("MIPI: host prepare failed (%d)\n", ret);
+		return;
+	}
 
-	if (dsi->ops && dsi->ops->prepare)
-		dsi->ops->prepare(dsi);
+	if (dsi->ops && dsi->ops->prepare) {
+		ret = dsi->ops->prepare(dsi);
+		if (ret) {
+			printf("MIPI: panel prepare failed (%d)\n", ret);
+			return;
+		}
+	}
 
-	if (dsi->ops && dsi->ops->enable)
-		dsi->ops->enable(dsi);
+	if (dsi->ops && dsi->ops->enable) {
+		ret = dsi->ops->enable(dsi);
+		if (ret) {
+			printf("MIPI: panel enable failed (%d)\n", ret);
+			return;
+		}
+	}
 
-	mipi_enable(module, input, sync, ctrl, dev);
+	ret = mipi_enable(module, input, sync, ctrl, dev);
+	if (ret) {
+		printf("MIPI: host enable failed (%d)\n", ret);
+		return;
+	}
 
 	/* set dp control */
-	dp_control_setup(module, sync, ctrl);
+	ret = dp_control_setup(module, sync, ctrl);
+	if (ret) {
+		printf("MIPI: display controller setup failed (%d)\n", ret);
+		return;
+	}
 	dp_control_enable(module, 1);
+	nx_mipi_print_state(module);
 }

@@ -24,6 +24,11 @@ void s_init(void)
 
 static void cpu_soc_init(void)
 {
+	if (IS_ENABLED(CONFIG_ARCH_S5P6818)) {
+		/* Match the vendor reset path and stop an inherited watchdog. */
+		writel(0, (void *)PHY_BASEADDR_WDT);
+	}
+
 	/*
 	 * NOTE> ALIVE Power Gate must enable for Alive register access.
 	 *	     must be clear wfi jump address
@@ -34,9 +39,11 @@ static void cpu_soc_init(void)
 	/* write 0xf0 on alive scratchpad reg for boot success check */
 	writel(readl(SCR_SIGNAGURE_READ) | 0xF0, (SCR_SIGNAGURE_SET));
 
-	/* set l2 cache tieoff */
+	/* The S5P4418 has these L2 retention tie-offs; 6818 does not. */
+#if defined(CONFIG_ARCH_S5P4418)
 	nx_tieoff_set(NX_TIEOFF_CORTEXA9MP_TOP_QUADL2C_L2RET1N_0, 1);
 	nx_tieoff_set(NX_TIEOFF_CORTEXA9MP_TOP_QUADL2C_L2RET1N_1, 1);
+#endif
 }
 
 int arch_cpu_init(void)
@@ -54,26 +61,6 @@ int print_cpuinfo(void)
 	return 0;
 }
 #endif
-
-void reset_cpu(void)
-{
-	void *clkpwr_reg = (void *)PHY_BASEADDR_CLKPWR;
-	const u32 sw_rst_enb_bitpos = 3;
-	const u32 sw_rst_enb_mask = 1 << sw_rst_enb_bitpos;
-	const u32 sw_rst_bitpos = 12;
-	const u32 sw_rst_mask = 1 << sw_rst_bitpos;
-	int pwrcont = 0x224;
-	int pwrmode = 0x228;
-	u32 read_value;
-
-	read_value = readl((void *)(clkpwr_reg + pwrcont));
-
-	read_value &= ~sw_rst_enb_mask;
-	read_value |= 1 << sw_rst_enb_bitpos;
-
-	writel(read_value, (void *)(clkpwr_reg + pwrcont));
-	writel(sw_rst_mask, (void *)(clkpwr_reg + pwrmode));
-}
 
 void enable_caches(void)
 {
