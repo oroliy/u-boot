@@ -55,10 +55,15 @@ int mmc_get_env_dev(void)
 
 int board_phy_config(struct phy_device *phydev)
 {
+	int ret;
+
 	if ((phydev->phy_id & X6818_RTL8211E_PHY_ID_MASK) ==
 	    X6818_RTL8211E_PHY_ID) {
 		printf("x6818: RTL8211E preserving strap RGMII delays\n");
-		phy_write(phydev, MDIO_DEVAD_NONE, MII_BMCR, BMCR_RESET);
+		ret = phy_reset(phydev);
+		if (ret)
+			return ret;
+
 		return genphy_config_aneg(phydev);
 	}
 

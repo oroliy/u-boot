@@ -70,13 +70,15 @@ static void nexell_gmac_phy_reset(void)
 	volatile struct nx_gpio_register_set *gpioe =
 		(void *)PHY_BASEADDR_GPIOE;
 
-	/* Match the vendor board sequence: high, low, high. */
+	/*
+	 * RTL8211E requires PHYRSTB low for at least 10 ms so its internal
+	 * regulator is reset, followed by 30 ms for the PHY circuits to settle.
+	 */
 	setbits_le32(&gpioe->gpioxout, BIT(22));
 	udelay(100);
 	clrbits_le32(&gpioe->gpioxout, BIT(22));
-	udelay(100);
+	mdelay(10);
 	setbits_le32(&gpioe->gpioxout, BIT(22));
-	/* RTL8211E needs the vendor Linux post-reset settling time. */
 	mdelay(30);
 }
 
