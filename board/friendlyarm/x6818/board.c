@@ -162,6 +162,7 @@ int dram_init_banksize(void)
 	unsigned int reg_val = readl(SCR_USER_SIG6_READ);
 
 	/* set global data memory */
+	gd->bd->bi_arch_number = 4330;	/* MACH_TYPE_S5P6818 (nxp5430) */
 	gd->bd->bi_boot_params = CFG_SYS_SDRAM_BASE + 0x00000100;
 
 	gd->bd->bi_dram[0].start = CFG_SYS_SDRAM_BASE;
