@@ -11,6 +11,7 @@
 #include <command.h>
 #include <dm.h>
 #include <env.h>
+#include <limits.h>
 #include <mapmem.h>
 #include <malloc.h>
 #include <linux/compat.h>
@@ -135,6 +136,21 @@ static void nx_display_parse_dp_top_layer(ofnode node, struct dp_plane_top *top)
 	      top->video_prior, top->back_color);
 }
 
+static unsigned int nx_display_map_fb(struct video_uc_plat *plat)
+{
+	void *fb = map_sysmem(plat->base, plat->size);
+	phys_addr_t addr = map_to_sysmem(fb);
+
+	/* S5P6818 display registers carry a 32-bit physical address. */
+	if (addr > U32_MAX) {
+		printf("Display framebuffer address %pa exceeds 32-bit hardware\n",
+		       &addr);
+		return 0;
+	}
+
+	return (unsigned int)addr;
+}
+
 static void nx_display_parse_dp_layer(ofnode node, struct dp_plane_info *plane)
 {
 	plane->left = ofnode_read_s32_default(node, "left", 0);
@@ -185,24 +201,21 @@ static void nx_display_parse_dp_planes(ofnode node,
 		 * fb_base must be different?
 		 */
 		if (strcmp(name, "layer_0") == 0) {
-			dp->planes[0].fb_base =
-			      (uint)map_sysmem(plat->base, plat->size);
+			dp->planes[0].fb_base = nx_display_map_fb(plat);
 			debug("%s(): dp->planes[0].fb_base == 0x%x\n", __func__,
 			      (uint)dp->planes[0].fb_base);
 			nx_display_parse_dp_layer(subnode, &dp->planes[0]);
 		}
 
 		if (strcmp(name, "layer_1") == 0) {
-			dp->planes[1].fb_base =
-			      (uint)map_sysmem(plat->base, plat->size);
+			dp->planes[1].fb_base = nx_display_map_fb(plat);
 			debug("%s(): dp->planes[1].fb_base == 0x%x\n", __func__,
 			      (uint)dp->planes[1].fb_base);
 			nx_display_parse_dp_layer(subnode, &dp->planes[1]);
 		}
 
 		if (strcmp(name, "layer_2") == 0) {
-			dp->planes[2].fb_base =
-			      (uint)map_sysmem(plat->base, plat->size);
+			dp->planes[2].fb_base = nx_display_map_fb(plat);
 			debug("%s(): dp->planes[2].fb_base == 0x%x\n", __func__,
 			      (uint)dp->planes[2].fb_base);
 			nx_display_parse_dp_layer(subnode, &dp->planes[2]);
@@ -564,10 +577,10 @@ static int nx_display_bind(struct udevice *dev)
 	 */
 	plat->size = 0x1000000;
 
-#ifdef CONFIG_TARGET_X6818
-	/* Match the vendor x6818 CONFIG_FB_ADDR used by the working BSP. */
-	plat->base = 0x46000000;
-#endif
+	if (IS_ENABLED(CONFIG_TARGET_X6818) ||
+	    IS_ENABLED(CONFIG_TARGET_X6818_ARM64))
+		/* Match the vendor x6818 framebuffer used by the working BSP. */
+		plat->base = 0x46000000;
 
 	return 0;
 }

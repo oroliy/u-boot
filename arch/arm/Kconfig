@@ -1036,7 +1036,7 @@ config ARCH_MX5
 
 config ARCH_NEXELL
 	bool "Nexell S5P4418/S5P6818 SoC"
-	select ENABLE_ARM_SOC_BOOT0_HOOK
+	select ENABLE_ARM_SOC_BOOT0_HOOK if !ARM64
 	select DM
 	select GPIO_EXTRA_HEADER
 

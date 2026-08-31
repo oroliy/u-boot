@@ -1,16 +1,34 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Nexell S5P6818 SoC device tree (AArch32).
+ * Nexell S5P6818 SoC device tree (AArch32 and AArch64).
  *
  * The S5P4418 and S5P6818 share the Nexell peripheral memory map
  * (UART0 = 0xC00A1000, see kernel/arch/arm/mach-s5p6818/include/mach/s5p6818.h),
  * so the IP node addresses are identical to s5p4418.dtsi.
  */
 
+#ifdef CONFIG_ARM64
+#include "skeleton64.dtsi"
+#define S5P6818_REG(addr, size) <0x0 addr 0x0 size>
+#else
 #include "skeleton.dtsi"
+#define S5P6818_REG(addr, size) <addr size>
+#endif
 
 / {
 	#include "s5p4418-pinctrl.dtsi"
+
+	/delete-node/ memory;
+
+	memory@40000000 {
+		device_type = "memory";
+#ifdef CONFIG_ARM64
+		/* Keep TF-A's top 32 MiB outside U-Boot's normal-memory map. */
+		reg = S5P6818_REG(0x40000000, 0x3e000000);
+#else
+		reg = S5P6818_REG(0x40000000, 0x40000000);
+#endif
+	};
 
 	aliases {
 		mmc0 = &mmc0;
@@ -26,7 +44,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "nexell,nexell-dwmmc";
-		reg = <0xc0062000 0x1000>;
+		reg = S5P6818_REG(0xc0062000, 0x1000);
 		bus-width = <4>;
 		index = <0>;
 		max-frequency = <50000000>;
@@ -39,7 +57,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "nexell,nexell-dwmmc";
-		reg = <0xc0068000 0x1000>;
+		reg = S5P6818_REG(0xc0068000, 0x1000);
 		bus-width = <4>;
 		index = <1>;
 		max-frequency = <50000000>;
@@ -52,7 +70,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "nexell,nexell-dwmmc";
-		reg = <0xc0069000 0x1000>;
+		reg = S5P6818_REG(0xc0069000, 0x1000);
 		bus-width = <4>;
 		index = <2>;
 		max-frequency = <50000000>;
@@ -65,7 +83,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "nexell,s5pxx18-i2c";
-		reg = <0xc00a4000 0x100>;
+		reg = S5P6818_REG(0xc00a4000, 0x100);
 		clock-frequency = <100000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c0_sda>, <&i2c0_scl>;
@@ -76,7 +94,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "nexell,s5pxx18-i2c";
-		reg = <0xc00a5000 0x100>;
+		reg = S5P6818_REG(0xc00a5000, 0x100);
 		clock-frequency = <100000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c1_sda>, <&i2c1_scl>;
@@ -87,7 +105,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "nexell,s5pxx18-i2c";
-		reg = <0xc00a6000 0x100>;
+		reg = S5P6818_REG(0xc00a6000, 0x100);
 		clock-frequency = <100000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c2_sda>, <&i2c2_scl>;
@@ -96,20 +114,20 @@
 
 	ehci:usb@c0030000 {
 		compatible = "nexell,s5p6818-ehci";
-		reg = <0xc0030000 0x1000>;
+		reg = S5P6818_REG(0xc0030000, 0x1000);
 		companion = <&ohci>;
 		status = "disabled";
 	};
 
 	ohci:usb@c0020000 {
 		compatible = "nexell,s5p6818-ohci";
-		reg = <0xc0020000 0x1000>;
+		reg = S5P6818_REG(0xc0020000, 0x1000);
 		status = "disabled";
 	};
 
 	dp0:dp@c0102800 {
 		compatible = "nexell,nexell-display";
-		reg = <0xc0102800 0x100>;
+		reg = S5P6818_REG(0xc0102800, 0x100);
 		index = <0>;
 		bootph-all;
 		status = "disabled";
@@ -117,7 +135,7 @@
 
 	gmac:ethernet@c0060000 {
 		compatible = "nexell,s5p6818-dwmac";
-		reg = <0xc0060000 0x2000>;
+		reg = S5P6818_REG(0xc0060000, 0x2000);
 		phy-mode = "rgmii";
 		max-speed = <1000>;
 		pinctrl-names = "default";
@@ -127,7 +145,7 @@
 
 	gpio_a:gpio@c001a000 {
 		compatible = "nexell,nexell-gpio";
-		reg = <0xc001a000 0x00000010>;
+		reg = S5P6818_REG(0xc001a000, 0x00000010);
 		altr,gpio-bank-width = <32>;
 		gpio-bank-name = "gpio_a";
 		gpio-controller;
@@ -136,7 +154,7 @@
 
 	gpio_b:gpio@c001b000 {
 		compatible = "nexell,nexell-gpio";
-		reg = <0xc001b000 0x00000010>;
+		reg = S5P6818_REG(0xc001b000, 0x00000010);
 		altr,gpio-bank-width = <32>;
 		gpio-bank-name = "gpio_b";
 		gpio-controller;
@@ -145,7 +163,7 @@
 
 	gpio_c:gpio@c001c000 {
 		compatible = "nexell,nexell-gpio";
-		reg = <0xc001c000 0x00000010>;
+		reg = S5P6818_REG(0xc001c000, 0x00000010);
 		nexell,gpio-bank-width = <32>;
 		gpio-bank-name = "gpio_c";
 		gpio-controller;
@@ -154,7 +172,7 @@
 
 	gpio_d:gpio@c001d000 {
 		compatible = "nexell,nexell-gpio";
-		reg = <0xc001d000 0x00000010>;
+		reg = S5P6818_REG(0xc001d000, 0x00000010);
 		nexell,gpio-bank-width = <32>;
 		gpio-bank-name = "gpio_d";
 		gpio-controller;
@@ -163,7 +181,7 @@
 
 	gpio_e:gpio@c001e000 {
 		compatible = "nexell,nexell-gpio";
-		reg = <0xc001e000 0x00000010>;
+		reg = S5P6818_REG(0xc001e000, 0x00000010);
 		nexell,gpio-bank-width = <32>;
 		gpio-bank-name = "gpio_e";
 		gpio-controller;
@@ -172,7 +190,7 @@
 
 	gpio_alv:gpio@c0010800 {
 		compatible = "nexell,nexell-gpio";
-		reg = <0xc0010800 0x00000010>;
+		reg = S5P6818_REG(0xc0010800, 0x00000010);
 		nexell,gpio-bank-width = <32>;
 		gpio-bank-name = "gpio_alv";
 		gpio-controller;
@@ -181,13 +199,13 @@
 
 	pinctrl: pinctrl@c0010000 {
 		compatible = "nexell,s5pxx18-pinctrl";
-		reg = <0xc0010000 0xf000>;
+		reg = S5P6818_REG(0xc0010000, 0xf000);
 		bootph-all;
 	};
 
 	uart0:uart@c00a1000 {
 		compatible = "nexell,s5p6818-uart";
-		reg = <0xc00a1000 0x1000>;
+		reg = S5P6818_REG(0xc00a1000, 0x1000);
 		clock-frequency = <50000000>;
 		id = <0>;
 		pinctrl-names = "default";
@@ -197,7 +215,7 @@
 
 	uart1:uart@c00a0000 {
 		compatible = "nexell,s5p6818-uart";
-		reg = <0xc00a0000 0x1000>;
+		reg = S5P6818_REG(0xc00a0000, 0x1000);
 		clock-frequency = <50000000>;
 		id = <1>;
 		status = "disabled";
@@ -205,7 +223,7 @@
 
 	uart2:uart@c00a2000 {
 		compatible = "nexell,s5p6818-uart";
-		reg = <0xc00a2000 0x1000>;
+		reg = S5P6818_REG(0xc00a2000, 0x1000);
 		clock-frequency = <50000000>;
 		id = <2>;
 		status = "disabled";
@@ -213,7 +231,7 @@
 
 	uart3:uart@c00a3000 {
 		compatible = "nexell,s5p6818-uart";
-		reg = <0xc00a3000 0x1000>;
+		reg = S5P6818_REG(0xc00a3000, 0x1000);
 		clock-frequency = <50000000>;
 		id = <3>;
 		status = "disabled";

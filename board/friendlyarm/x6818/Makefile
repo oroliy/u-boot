@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0+
 #
-# Nexell S5P6818 x6818 board (AArch32)
+# Nexell S5P6818 x6818 board (AArch32 and AArch64 BL33)
 
 obj-y	:= board.o
 obj-y	+= x6818_cmd.o

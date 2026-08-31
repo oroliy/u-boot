@@ -4,9 +4,14 @@
 # Hyunseok, Jung <hsjung@nexell.co.kr>
 
 obj-y				+= clock.o
+ifneq ($(CONFIG_ARM64),y)
 obj-y				+= timer.o
+obj-y				+= reset-cpu.o
+endif
 obj-y				+= reset.o
 obj-y				+= nx_gpio.o
 obj-y				+= tieoff.o
+obj-$(CONFIG_ARM64)		+= mmu-arm64.o
+obj-$(CONFIG_ARM64)		+= ../cpu/armv7/s5p-common/pwm.o
 obj-$(CONFIG_ARCH_S5P4418)	+= reg-call.o
 obj-$(CONFIG_ARCH_S5P4418)	+= nx_sec_reg.o

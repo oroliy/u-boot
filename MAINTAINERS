@@ -511,23 +511,28 @@ F:	board/msc/sm2s_imx8mp/
 F:	configs/msc_sm2s_imx8mp_defconfig
 F:	include/configs/msc_sm2s_imx8mp.h
 
-ARM NEXELL S5P4418
+ARM NEXELL S5P4418/S5P6818
 M:	Stefan Bosch <stefan_b@posteo.net>
 S:	Maintained
 F:	arch/arm/cpu/armv7/s5p4418/
 F:	arch/arm/dts/s5p4418*
+F:	arch/arm/dts/s5p6818*
 F:	arch/arm/mach-nexell/
 F:	board/friendlyarm/
 F:	configs/s5p4418_nanopi2_defconfig
+F:	configs/x6818*_defconfig
 F:	doc/README.s5p4418
 F:	drivers/gpio/nx_gpio.c
 F:	drivers/i2c/nx_i2c.c
 F:	drivers/mmc/nexell_dw_mmc_dm.c
+F:	drivers/mmc/nexell_dw_mmc.c
 F:	drivers/pinctrl/nexell/
 F:	drivers/serial/serial_s5p4418_pl011.c
+F:	drivers/serial/serial_s5p6818.c
 F:	drivers/video/nexell/
 F:	drivers/video/nexell_display.c
 F:	include/configs/s5p4418_nanopi2.h
+F:	include/configs/x6818.h
 
 ARM OWL
 M:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>

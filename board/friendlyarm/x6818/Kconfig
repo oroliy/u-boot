@@ -1,4 +1,4 @@
-if TARGET_X6818
+if TARGET_X6818 || TARGET_X6818_ARM64
 
 config SYS_BOARD
 	default "x6818"

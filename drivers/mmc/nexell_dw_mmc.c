@@ -173,8 +173,8 @@ static int nexell_dwmmc_of_to_plat(struct udevice *dev)
 	priv->s_shift = dev_read_u32_default(dev, "sample_shift", 2);
 	priv->mmcboost = dev_read_u32_default(dev, "mmcboost", 0);
 
-	debug("  index==%d, name==%s, ioaddr==0x%08x\n",
-	      host->dev_index, host->name, (u32)host->ioaddr);
+	debug("  index==%d, name==%s, ioaddr==%p\n",
+	      host->dev_index, host->name, host->ioaddr);
 	return 0;
 }
 

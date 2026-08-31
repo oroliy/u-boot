@@ -12,12 +12,12 @@ config ARCH_S5P4418
 
 config ARCH_S5P6818
 	bool "Nexell S5P6818 SoC"
-	select CPU_V7A
 	select OF_CONTROL
 	select NX_GPIO
 	select DM_SERIAL
 	help
-	  Enable support for Nexell S5P6818 SoC (AArch32 mode).
+	  Enable common support for the Nexell S5P6818 SoC. Board targets
+	  select either the AArch32 or AArch64 execution state.
 
 menu "Nexell S5P4418/S5P6818"
 	depends on ARCH_NEXELL
@@ -35,8 +35,18 @@ config TARGET_NANOPI2
 config TARGET_X6818
 	bool "Nexell S5P6818 x6818 board"
 	select ARCH_S5P6818
+	select CPU_V7A
 	help
 	  Enable support for the Nexell S5P6818 x6818 board (AArch32).
+
+config TARGET_X6818_ARM64
+	bool "Nexell S5P6818 x6818 board (AArch64 BL33)"
+	select ARCH_S5P6818
+	select ARM64
+	select ARM_SMCCC
+	help
+	  Enable the AArch64 x6818 BL33 target entered by TF-A at EL2. This
+	  target uses the architectural timer and PSCI firmware interfaces.
 
 endchoice
 
@@ -49,6 +59,7 @@ config TIMER_SYS_TICK_CH
 config SYS_BOARD
 	default "nanopi2" if TARGET_NANOPI2
 	default "x6818" if TARGET_X6818
+	default "x6818" if TARGET_X6818_ARM64
 
 config SYS_VENDOR
 	default "friendlyarm"
@@ -59,6 +70,7 @@ config SYS_SOC
 config SYS_CONFIG_NAME
 	default "s5p4418_nanopi2" if TARGET_NANOPI2
 	default "x6818" if TARGET_X6818
+	default "x6818" if TARGET_X6818_ARM64
 
 config SYS_PLLFIN
 	default 24000000

@@ -11,7 +11,7 @@
  * device tree nodes in this file.
  */
 
-pinctrl@C0010000 {
+pinctrl@c0010000 {
 	/*
 	 * values for "pin-pull":
 	 *	pulldown resistor = 0

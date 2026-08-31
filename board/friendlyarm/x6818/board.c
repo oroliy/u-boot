@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Nexell S5P6818 x6818 board init (AArch32).
+ * Nexell S5P6818 x6818 board init (AArch32 and AArch64 BL33).
  *
  * Trimmed from board/friendlyarm/nanopi2/board.c: keeps the Nexell
  * DDR-info-register RAM detection. Display and splash setup are described by
@@ -22,7 +22,7 @@
 DECLARE_GLOBAL_DATA_PTR;
 
 /* The vendor x6818 U-Boot boots the OS from eMMC, dwmmc.2. */
-static int mmc_boot_dev = CONFIG_ENV_MMC_DEVICE_INDEX;
+static int mmc_boot_dev = CONFIG_ROOT_DEV;
 
 /* Keep the splash path independent of saved U-Boot environment variables. */
 #define X6818_SPLASH_LOAD_CMD \
@@ -162,8 +162,10 @@ int dram_init_banksize(void)
 	unsigned int reg_val = readl(SCR_USER_SIG6_READ);
 
 	/* set global data memory */
-	gd->bd->bi_arch_number = 4330;	/* MACH_TYPE_S5P6818 (nxp5430) */
-	gd->bd->bi_boot_params = CFG_SYS_SDRAM_BASE + 0x00000100;
+	if (!IS_ENABLED(CONFIG_ARM64)) {
+		gd->bd->bi_arch_number = 4330;
+		gd->bd->bi_boot_params = CFG_SYS_SDRAM_BASE + 0x00000100;
+	}
 
 	gd->bd->bi_dram[0].start = CFG_SYS_SDRAM_BASE;
 	gd->bd->bi_dram[0].size  = CFG_SYS_SDRAM_SIZE;

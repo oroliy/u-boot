@@ -30,22 +30,3 @@ void nx_rstcon_setrst(u32 rstindex, enum rstcon status)
 	curstat		|= (status & 0x01) << bitpos;
 	writel(curstat, &nx_rstcon->regrst[regnum]);
 }
-
-/* S5P6818 CLKPWR reset registers. */
-#define CLKPWR_PWRCONT		(PHY_BASEADDR_CLKPWR + 0x224)
-#define CLKPWR_PWRMODE		(PHY_BASEADDR_CLKPWR + 0x228)
-#define CLKPWR_SWRSTENB		(1U << 3)
-#define CLKPWR_SWRESET		(1U << 12)
-
-void reset_cpu(void)
-{
-	u32 val;
-
-	/* This is the sequence used by the vendor U-Boot and Linux BSP. */
-	val = readl((void __iomem *)CLKPWR_PWRCONT);
-	writel(val | CLKPWR_SWRSTENB, (void __iomem *)CLKPWR_PWRCONT);
-	writel(CLKPWR_SWRESET, (void __iomem *)CLKPWR_PWRMODE);
-
-	while (1)
-		;
-}
