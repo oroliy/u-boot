@@ -44,6 +44,8 @@ config TARGET_X6818_ARM64
 	select ARCH_S5P6818
 	select ARM64
 	select ARM_SMCCC
+	select SYSRESET
+	select SYSRESET_NEXELL_PSCI
 	help
 	  Enable the AArch64 x6818 BL33 target entered by TF-A at EL2. This
 	  target uses the Nexell SoC timer and PSCI firmware interfaces. The

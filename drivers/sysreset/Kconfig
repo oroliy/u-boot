@@ -181,6 +181,16 @@ config SYSRESET_PSCI
 	  Enable PSCI SYSTEM_RESET function call.  To use this, PSCI firmware
 	  must be running on your system.
 
+config SYSRESET_NEXELL_PSCI
+	bool "Enable S5P6818 AArch64 PSCI system reset"
+	depends on TARGET_X6818_ARM64
+	depends on SYSRESET
+	help
+	  Use the fixed SMC PSCI SYSTEM_RESET conduit provided by the S5P6818
+	  TF-A BL31.  This target enters U-Boot at NS-EL2 and does not use the
+	  generic PSCI sysreset child, whose runtime firmware-node probe is not
+	  available on this boot path.
+
 config SYSRESET_SBI
 	bool "Enable support for SBI System Reset"
 	depends on RISCV_SMODE && SBI_V02
