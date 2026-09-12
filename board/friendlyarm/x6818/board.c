@@ -24,9 +24,12 @@ DECLARE_GLOBAL_DATA_PTR;
 /* The vendor x6818 U-Boot boots the OS from eMMC, dwmmc.2. */
 static int mmc_boot_dev = CONFIG_ROOT_DEV;
 
-/* Keep the splash path independent of saved U-Boot environment variables. */
+/* Keep the splash path independent of saved U-Boot environment variables.
+ * The boot partition (mmc 2:1) is FAT32 on both SD and eMMC layouts, so try
+ * fatload first and keep ext4load as a fallback for ext4 boot partitions. */
 #define X6818_SPLASH_LOAD_CMD \
-	"ext4load mmc 2:1 0x78000000 logo.bmp"
+	"if fatload mmc 2:1 0x78000000 logo.bmp; then true; " \
+	"else ext4load mmc 2:1 0x78000000 logo.bmp; fi"
 #define X6818_SPLASH_SHOW_CMD "bmp display 0x78000000"
 
 int x6818_display_builtin_logo(struct udevice *dev);
@@ -120,7 +123,7 @@ int board_late_init(void)
 	}
 
 	/* Load and show the splash before autoboot can be interrupted. */
-	if (video && IS_ENABLED(CONFIG_CMD_EXT4) && IS_ENABLED(CONFIG_CMD_BMP)) {
+	if (video && IS_ENABLED(CONFIG_CMD_FAT) && IS_ENABLED(CONFIG_CMD_BMP)) {
 		ret = run_command(X6818_SPLASH_LOAD_CMD, 0);
 		if (!ret) {
 			ret = run_command(X6818_SPLASH_SHOW_CMD, 0);
