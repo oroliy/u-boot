@@ -33,11 +33,11 @@
  * ENV
  */
 #define BLOADER_MMC							\
-	"ext4load mmc ${rootdev}:${bootpart} "
+	"load mmc ${rootdev}:${bootpart} "
 
 #ifdef CONFIG_ARM64
 #define X6818_KERNEL_NAME	"kernel=Image\0"
-#define X6818_DTB_NAME		"dtb_name=s5p6818-x6818-arm64.dtb\0"
+#define X6818_DTB_NAME		"dtb_name=s5p6818-x6818-nexell-timer.dtb\0"
 #define X6818_FIT_SETTINGS					\
 	"fit_addr=0x50000000\0"					\
 	"fit_name=openwrt-nexell-s5p6818_arm64-" 		\
