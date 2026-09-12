@@ -136,6 +136,23 @@ int x6818_display_power_on(void)
 	return 0;
 }
 
+int x6818_display_enable_rgb_pins(void)
+{
+	volatile struct nx_gpio_register_set *gpioa =
+		(void *)PHY_BASEADDR_GPIOA;
+	unsigned int pin;
+
+	/*
+	 * RGB LCD data/sync on GPIOA0-27 (ALT1).  GPIOA28-31 stay untouched:
+	 * they carry BACK/MENU keys and the SD0 CLK/CMD lines.
+	 */
+	for (pin = 0; pin < 28; pin++)
+		nx_gpio_config_direct(gpioa, pin, 1, 0, 0);
+	printf("x6818: RGB LCD pins enabled (GPIOA0-27 ALT1)\n");
+
+	return 0;
+}
+
 int x6818_display_enable_backlight(void)
 {
 	volatile struct nx_gpio_register_set *gpiod =

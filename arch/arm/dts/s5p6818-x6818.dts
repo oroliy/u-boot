@@ -80,7 +80,7 @@
 &dp0 {
 		status = "okay";
 		module = <0>;
-		lcd-type = "mipi";
+		lcd-type = "rgb";
 		pinctrl-names = "default";
 		pinctrl-0 = <&mipi_panel_reset>;
 
@@ -92,23 +92,24 @@
 
 		dp-sync {
 			h_active_len = <1024>;
-			/* Match the vendor lcd=wy070ml timing: 2/80/168. */
-			h_sync_width = <2>;
-			h_back_porch = <80>;
-			h_front_porch = <168>;
-			/* Vendor WY070ML configuration uses active-high HSYNC. */
+			/* 7-inch 1024x600 RGB panel (vendor vs070cxn timing). */
+			h_sync_width = <20>;
+			h_back_porch = <140>;
+			h_front_porch = <160>;
+			/* Vendor RGB configuration uses active-high HSYNC. */
 			h_sync_invert = <1>;
 			v_active_len = <600>;
 			v_sync_width = <3>;
 			v_back_porch = <20>;
 			v_front_porch = <12>;
-			/* Vendor WY070ML configuration uses active-high VSYNC. */
+			/* Vendor RGB configuration uses active-high VSYNC. */
 			v_sync_invert = <1>;
 		};
 
 		dp-ctrl {
 			clk_src_lv0 = <2>;
-			clk_div_lv0 = <12>;
+			/* 780 MHz / 15 = 52 MHz RGB pixel clock. */
+			clk_div_lv0 = <15>;
 			clk_src_lv1 = <7>;
 			clk_div_lv1 = <1>;
 			out_format = <3>;

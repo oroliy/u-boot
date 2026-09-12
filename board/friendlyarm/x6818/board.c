@@ -34,6 +34,7 @@ static int mmc_boot_dev = CONFIG_ROOT_DEV;
 
 int x6818_display_builtin_logo(struct udevice *dev);
 int x6818_display_power_on(void);
+int x6818_display_enable_rgb_pins(void);
 int x6818_display_enable_backlight(void);
 
 int board_mmc_bootdev(void)
@@ -111,6 +112,10 @@ int board_late_init(void)
 		ret = x6818_display_power_on();
 		if (ret)
 			printf("x6818: LCD power init failed (%d)\n", ret);
+
+		ret = x6818_display_enable_rgb_pins();
+		if (ret)
+			printf("x6818: RGB pin init failed (%d)\n", ret);
 
 		ret = uclass_first_device_err(UCLASS_VIDEO, &video);
 		if (ret)
