@@ -10,6 +10,8 @@
 #include <config.h>
 #include <command.h>
 #include <dm.h>
+#include <env.h>
+#include <event.h>
 #include <fdt_support.h>
 #include <log.h>
 #include <phy.h>
@@ -18,6 +20,8 @@
 #include <asm/io.h>
 
 #include <asm/arch/nexell.h>
+
+#include "boot-console.h"
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -36,6 +40,29 @@ int x6818_display_builtin_logo(struct udevice *dev);
 int x6818_display_power_on(void);
 int x6818_display_enable_rgb_pins(void);
 int x6818_display_enable_backlight(void);
+
+#ifdef CONFIG_TARGET_X6818_ARM64
+static int x6818_console_settings(void)
+{
+	int ret;
+
+	/* The saved environment may predate the screen console. Change only
+	 * the live copy, before console_init_r() replays the early log buffer.
+	 */
+	ret = env_set("stdout", "serial,vidconsole");
+	if (!ret)
+		ret = env_set("stderr", "serial,vidconsole");
+	if (ret)
+		printf("x6818: cannot select dual console (%d)\n", ret);
+
+	/* Power and mux must be ready when the console probes the video device. */
+	x6818_display_power_on();
+	x6818_display_enable_rgb_pins();
+	return 0;
+}
+
+EVENT_SPY_SIMPLE(EVT_SETTINGS_R, x6818_console_settings);
+#endif
 
 int board_mmc_bootdev(void)
 {
@@ -127,6 +154,10 @@ int board_late_init(void)
 		}
 	}
 
+	/* Boot logs own the screen by default. A manual splash remains opt-in. */
+	if (env_get_yesno("show_splash") != 1)
+		return 0;
+
 	/* Load and show the splash before autoboot can be interrupted. */
 	if (video && IS_ENABLED(CONFIG_CMD_FAT) && IS_ENABLED(CONFIG_CMD_BMP)) {
 		ret = run_command(X6818_SPLASH_LOAD_CMD, 0);
@@ -195,6 +226,9 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	int nodeoff;
 	unsigned int rootdev;
+	char args[2048];
+	const char *input;
+	int len, ret;
 
 	if (board_mmc_bootdev() > 0) {
 		rootdev = fdt_getprop_u32_default(blob, "/board", "sdidx", 2);
@@ -205,6 +239,21 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 				fdt_setprop_u32(blob, nodeoff, "linux,rootdev",
 						rootdev);
 		}
+	}
+
+	if (IS_ENABLED(CONFIG_TARGET_X6818_ARM64)) {
+		nodeoff = fdt_find_or_add_subnode(blob, 0, "chosen");
+		if (nodeoff < 0)
+			return nodeoff;
+		input = fdt_getprop(blob, nodeoff, "bootargs", &len);
+		if (input && (len <= 0 || !memchr(input, '\0', len)))
+			return -EINVAL;
+		ret = x6818_console_bootargs(args, sizeof(args), input);
+		if (ret) {
+			printf("x6818: bootargs too long for dual console\n");
+			return ret;
+		}
+		return fdt_setprop_string(blob, nodeoff, "bootargs", args);
 	}
 
 	return 0;
