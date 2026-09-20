@@ -25,15 +25,34 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-/* The vendor x6818 U-Boot boots the OS from eMMC, dwmmc.2. */
-static int mmc_boot_dev = CONFIG_ROOT_DEV;
+/*
+ * The iROM/BL2 hand-off leaves the selected SDMMC port in the power scratch
+ * register.  Port 2 is the on-board eMMC (U-Boot mmc 2); port 0 is the SD
+ * socket (U-Boot mmc 0).  Keep CONFIG_ROOT_DEV as the fail-safe for USB or
+ * older firmware that does not provide the SDMMC boot-mode marker.
+ */
+static int x6818_boot_mmc_dev(void)
+{
+	u32 boot_mode = readl(PHY_BASEADDR_CLKPWR + SYSRSTCONFIG);
+
+	if ((boot_mode & BOOTMODE_MASK) == BOOTMODE_SDMMC) {
+		u32 port = readl(SCR_ARM_SECOND_BOOT_REG1);
+
+		if (port == EMMC_PORT_NUM)
+			return 2;
+		if (port == SD_PORT_NUM)
+			return 0;
+	}
+
+	return CONFIG_ROOT_DEV;
+}
 
 /* Keep the splash path independent of saved U-Boot environment variables.
- * The boot partition (mmc 2:1) is FAT32 on both SD and eMMC layouts, so try
+ * The boot partition (${rootdev}:1) is FAT32 on both SD and eMMC layouts, so try
  * fatload first and keep ext4load as a fallback for ext4 boot partitions. */
 #define X6818_SPLASH_LOAD_CMD \
-	"if fatload mmc 2:1 0x78000000 logo.bmp; then true; " \
-	"else ext4load mmc 2:1 0x78000000 logo.bmp; fi"
+	"if fatload mmc ${rootdev}:1 0x78000000 logo.bmp; then true; " \
+	"else ext4load mmc ${rootdev}:1 0x78000000 logo.bmp; fi"
 #define X6818_SPLASH_SHOW_CMD "bmp display 0x78000000"
 
 int x6818_display_builtin_logo(struct udevice *dev);
@@ -41,15 +60,26 @@ int x6818_display_power_on(void);
 int x6818_display_enable_rgb_pins(void);
 int x6818_display_enable_backlight(void);
 
+static int x6818_set_rootdev(void)
+{
+	int ret = env_set_ulong("rootdev", x6818_boot_mmc_dev());
+
+	if (ret)
+		printf("x6818: cannot select boot MMC (%d)\n", ret);
+
+	return ret;
+}
+
 #ifdef CONFIG_TARGET_X6818_ARM64
 static int x6818_console_settings(void)
 {
-	int ret;
+	int ret = x6818_set_rootdev();
 
 	/* The saved environment may predate the screen console. Change only
 	 * the live copy, before console_init_r() replays the early log buffer.
 	 */
-	ret = env_set("stdout", "serial,vidconsole");
+	if (!ret)
+		ret = env_set("stdout", "serial,vidconsole");
 	if (!ret)
 		ret = env_set("stderr", "serial,vidconsole");
 	if (ret)
@@ -62,17 +92,19 @@ static int x6818_console_settings(void)
 }
 
 EVENT_SPY_SIMPLE(EVT_SETTINGS_R, x6818_console_settings);
+#else
+EVENT_SPY_SIMPLE(EVT_SETTINGS_R, x6818_set_rootdev);
 #endif
 
 int board_mmc_bootdev(void)
 {
-	return mmc_boot_dev;
+	return x6818_boot_mmc_dev();
 }
 
 /* call from common/env_mmc.c */
 int mmc_get_env_dev(void)
 {
-	return mmc_boot_dev;
+	return x6818_boot_mmc_dev();
 }
 
 /*
