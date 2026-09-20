@@ -35,6 +35,28 @@
 #define BLOADER_MMC							\
 	"load mmc ${rootdev}:${bootpart} "
 
+/* The AArch64 image is a complete OpenWrt system; keep its root contract
+ * in the compiled default environment and restore it before every MMC boot.
+ * mmcboot replaces the fallback device name with the current partition UUID,
+ * so the same command covers both the eMMC and SD-card image.
+ */
+#define X6818_DEFAULT_BOOTARGS					\
+	"console=ttySAC0,115200 earlycon=s5p6818,mmio,0xc00a1000 " \
+	"root=/dev/mmcblk0p2 rootwait rw fstools_overlay_fstype=ext4"
+#define X6818_BOOTARGS						\
+	"bootargs=" X6818_DEFAULT_BOOTARGS "\0"
+#define X6818_SET_BOOTARGS					\
+	"setenv rootpartuuid; "					\
+	"if part uuid mmc ${rootdev}:${rootpart} rootpartuuid; then " \
+		"setenv bootargs \"console=ttySAC0,115200 " \
+			"earlycon=s5p6818,mmio,0xc00a1000 " \
+			"root=PARTUUID=${rootpartuuid} rootwait rw " \
+			"fstools_overlay_fstype=ext4\"; " \
+	"else "						\
+		"echo Failed to identify the MMC root partition; " \
+		"setenv bootargs \"" X6818_DEFAULT_BOOTARGS "\"; " \
+	"fi; "
+
 #ifdef CONFIG_ARM64
 #define X6818_KERNEL_NAME	"kernel=Image\0"
 #define X6818_DTB_NAME		"dtb_name=s5p6818-x6818-nexell-timer.dtb\0"
@@ -48,6 +70,7 @@
 #define X6818_MMCBOOT						\
 	"mmcboot="							\
 		"echo Booting AArch64 Image from mmc ${rootdev}:${bootpart} ...; " \
+		X6818_SET_BOOTARGS					\
 		"mmc dev ${rootdev}; "					\
 		"if run load_kernel && run load_dtb; then "		\
 			"booti ${loadaddr} - ${dtb_addr}; "		\
@@ -67,6 +90,7 @@
 		"bootm ${loadaddr}\0"					\
 	"mmcboot="							\
 		"echo Booting from mmc ${rootdev}:${rootpart} ...; " \
+		X6818_SET_BOOTARGS					\
 		"if fstype mmc ${rootdev}:${bootpart}; then "		\
 			"if run load_kernel && run load_dtb; then "		\
 				"bootz ${loadaddr} - ${dtb_addr}; "	\
@@ -86,6 +110,7 @@
 	"rootdev=" __stringify(CONFIG_ROOT_DEV) "\0"		\
 	"rootpart=" __stringify(CONFIG_ROOT_PART) "\0"		\
 	"bootpart=" __stringify(CONFIG_BOOT_PART) "\0"		\
+	X6818_BOOTARGS						\
 	X6818_KERNEL_NAME					\
 	"loadaddr=" __stringify(CONFIG_SYS_LOAD_ADDR) "\0"	\
 	X6818_DTB_NAME						\
