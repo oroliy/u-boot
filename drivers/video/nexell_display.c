@@ -443,6 +443,12 @@ static struct nx_display_dev *nx_display_setup(void)
 		}
 	}
 
+	/* Clear the entire framebuffer before enabling display output to avoid showing uninitialized RAM noise */
+	if (dp->fb_plane && dp->fb_plane->fb_base) {
+		size_t fb_sz = plat ? plat->size : 0x1000000;
+		memset((void *)(uintptr_t)dp->fb_plane->fb_base, 0, fb_sz);
+	}
+
 	switch (dp->dev_type) {
 #ifdef CONFIG_VIDEO_NX_RGB
 	case DP_DEVICE_RGBLCD:

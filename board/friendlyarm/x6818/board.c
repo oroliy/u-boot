@@ -353,6 +353,10 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 							reg[idx++] = cpu_to_fdt32((u32)plat->size);
 
 							fdt_setprop(blob, rsvoff, "reg", reg, idx * sizeof(fdt32_t));
+
+							char nodename[64];
+							snprintf(nodename, sizeof(nodename), "framebuffer@%lx", (ulong)plat->base);
+							fdt_set_name(blob, rsvoff, nodename);
 						}
 					}
 				}
