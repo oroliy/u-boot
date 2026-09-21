@@ -447,6 +447,8 @@ static struct nx_display_dev *nx_display_setup(void)
 	if (dp->fb_plane && dp->fb_plane->fb_base) {
 		size_t fb_sz = plat ? plat->size : 0x1000000;
 		memset((void *)(uintptr_t)dp->fb_plane->fb_base, 0, fb_sz);
+		flush_dcache_range((ulong)dp->fb_plane->fb_base,
+				   (ulong)dp->fb_plane->fb_base + fb_sz);
 	}
 
 	switch (dp->dev_type) {
@@ -565,6 +567,8 @@ static int nx_display_probe(struct udevice *dev)
 	sprintf(addr, "0x%x", dp->fb_addr);
 	debug("%s(): env_set(\"fb_addr\", %s) ...\n", __func__, addr);
 	env_set("fb_addr", addr);
+
+	video_set_flush_dcache(dev, true);
 
 	return 0;
 }

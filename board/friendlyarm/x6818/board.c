@@ -136,25 +136,32 @@ int board_phy_config(struct phy_device *phydev)
 	return 0;
 }
 
+static const char *s_reset_cause = "unknown";
+
 #ifdef CONFIG_DISPLAY_BOARDINFO
 int checkboard(void)
 {
+	u32 scratch = readl((void __iomem *)SCR_SIGNAGURE_READ);
 	u32 rst = readl((void __iomem *)CLKPWR_RESETSTATUS) & RESETSTATUS_MASK;
-	const char *cause;
 
-	if (rst & RESETSTATUS_POR)
-		cause = "power-on";
-	else if (rst & RESETSTATUS_WDT)
-		cause = "watchdog";
-	else if (rst & RESETSTATUS_SW)
-		cause = "software";
-	else if (rst & RESETSTATUS_GPIO)
-		cause = "external";
-	else
-		cause = "unknown";
+	if (scratch == 0x50414E43) { /* 'PANC' */
+		s_reset_cause = "panic";
+		writel(1, (void __iomem *)PHY_BASEADDR_ALIVE);
+		writel(0xFFFFFFFF, (void __iomem *)SCR_SIGNAGURE_RESET);
+	} else if (rst & RESETSTATUS_POR) {
+		s_reset_cause = "power-on";
+	} else if (rst & RESETSTATUS_WDT) {
+		s_reset_cause = "watchdog";
+	} else if (rst & RESETSTATUS_SW) {
+		s_reset_cause = "software";
+	} else if (rst & RESETSTATUS_GPIO) {
+		s_reset_cause = "external";
+	} else {
+		s_reset_cause = "unknown";
+	}
 
 	printf("Board: Nexell S5P6818 x6818 (reset: %s, 0x%x)\n",
-	       cause, rst);
+	       s_reset_cause, rst);
 	return 0;
 }
 #endif
@@ -179,21 +186,7 @@ int board_late_init(void)
 	int ret;
 
 	/* Publish reset reason for Linux /proc/cmdline */
-	{
-		u32 rst = readl((void __iomem *)CLKPWR_RESETSTATUS) &
-			  RESETSTATUS_MASK;
-		const char *reason = "unknown";
-
-		if (rst & RESETSTATUS_POR)
-			reason = "power-on";
-		else if (rst & RESETSTATUS_WDT)
-			reason = "watchdog";
-		else if (rst & RESETSTATUS_SW)
-			reason = "software";
-		else if (rst & RESETSTATUS_GPIO)
-			reason = "external";
-		env_set("reset_reason", reason);
-	}
+	env_set("reset_reason", s_reset_cause);
 
 	if (IS_ENABLED(CONFIG_SILENT_CONSOLE))
 		gd->flags &= ~GD_FLG_SILENT;
