@@ -577,10 +577,12 @@ static int nx_display_bind(struct udevice *dev)
 	 */
 	plat->size = 0x1000000;
 
-	if (IS_ENABLED(CONFIG_TARGET_X6818) ||
-	    IS_ENABLED(CONFIG_TARGET_X6818_ARM64))
-		/* Match the vendor x6818 framebuffer used by the working BSP. */
-		plat->base = 0x46000000;
+	/* Let video_reserve() allocate from RAM top.  The vendor BSP hardcoded
+	 * 0x46000000 which sits only 2.25 MiB above TEXT_BASE; the resulting
+	 * proximity to U-Boot's pre-relocation working area and the absence of
+	 * a proper gd->relocaddr reservation caused visible flicker on the
+	 * x6818 panel.
+	 */
 
 	return 0;
 }
