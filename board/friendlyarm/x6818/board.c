@@ -139,7 +139,22 @@ int board_phy_config(struct phy_device *phydev)
 #ifdef CONFIG_DISPLAY_BOARDINFO
 int checkboard(void)
 {
-	printf("Board: Nexell S5P6818 x6818\n");
+	u32 rst = readl((void __iomem *)CLKPWR_RESETSTATUS) & RESETSTATUS_MASK;
+	const char *cause;
+
+	if (rst & RESETSTATUS_POR)
+		cause = "power-on";
+	else if (rst & RESETSTATUS_WDT)
+		cause = "watchdog";
+	else if (rst & RESETSTATUS_SW)
+		cause = "software";
+	else if (rst & RESETSTATUS_GPIO)
+		cause = "external";
+	else
+		cause = "unknown";
+
+	printf("Board: Nexell S5P6818 x6818 (reset: %s, 0x%x)\n",
+	       cause, rst);
 	return 0;
 }
 #endif
@@ -162,6 +177,23 @@ int board_late_init(void)
 {
 	struct udevice *video = NULL;
 	int ret;
+
+	/* Publish reset reason for Linux /proc/cmdline */
+	{
+		u32 rst = readl((void __iomem *)CLKPWR_RESETSTATUS) &
+			  RESETSTATUS_MASK;
+		const char *reason = "unknown";
+
+		if (rst & RESETSTATUS_POR)
+			reason = "power-on";
+		else if (rst & RESETSTATUS_WDT)
+			reason = "watchdog";
+		else if (rst & RESETSTATUS_SW)
+			reason = "software";
+		else if (rst & RESETSTATUS_GPIO)
+			reason = "external";
+		env_set("reset_reason", reason);
+	}
 
 	if (IS_ENABLED(CONFIG_SILENT_CONSOLE))
 		gd->flags &= ~GD_FLG_SILENT;

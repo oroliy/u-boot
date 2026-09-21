@@ -7,6 +7,8 @@
 #ifndef __NEXELL_H__
 #define __NEXELL_H__
 
+#include <linux/bitops.h>
+
 #define PHY_BASEADDR_DMA0		(0xC0000000)
 #define PHY_BASEADDR_DMA1		(0xC0001000)
 #if defined(CONFIG_ARCH_S5P4418)
@@ -330,6 +332,18 @@
 #define	SCR_SIGNAGURE_READ		(SCR_ALIVE_BASE + 0x070)
 
 #define SYSRSTCONFIG			(0x23C)
+
+/* Reset Status Register (CLKPWR + 0x218, read-only).
+ * S5P6818 User's Manual Section 4.9.1.26.
+ * Hardware latches the most recent reset source and clears previous status.
+ * Priority: POR > GPIO > Watchdog > Software.
+ */
+#define CLKPWR_RESETSTATUS	(PHY_BASEADDR_CLKPWR + 0x218)
+#define RESETSTATUS_POR		BIT(0)	/* Power-On Reset (cold boot) */
+#define RESETSTATUS_GPIO	BIT(1)	/* nRESET pin / external button */
+#define RESETSTATUS_WDT		BIT(2)	/* Watchdog timer reset */
+#define RESETSTATUS_SW		BIT(3)	/* Software reset (PWRMODE bit12) */
+#define RESETSTATUS_MASK	0x0F
 #define DEVICEBOOTINFO			(0x50)
 #define BOOTMODE_MASK			(0x7)
 #define BOOTMODE_SDMMC			5
