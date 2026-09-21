@@ -317,8 +317,49 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 			printf("x6818: bootargs too long for dual console\n");
 			return ret;
 		}
-		return fdt_setprop_string(blob, nodeoff, "bootargs", args);
+		ret = fdt_setprop_string(blob, nodeoff, "bootargs", args);
+		if (ret)
+			return ret;
 	}
+
+#if CONFIG_IS_ENABLED(VIDEO)
+	{
+		struct udevice *vdev;
+		if (!uclass_first_device_err(UCLASS_VIDEO, &vdev)) {
+			struct video_uc_plat *plat = dev_get_uclass_plat(vdev);
+			if (plat && plat->base && plat->size) {
+				int fboff = fdt_node_offset_by_compatible(blob, -1, "simple-framebuffer");
+				if (fboff >= 0) {
+					const fdt32_t *ph = fdt_getprop(blob, fboff, "memory-region", &len);
+					if (ph && len == 4) {
+						u32 phandle = fdt32_to_cpu(*ph);
+						int rsvoff = fdt_node_offset_by_phandle(blob, phandle);
+						if (rsvoff >= 0) {
+							int parent = fdt_parent_offset(blob, rsvoff);
+							int na = fdt_address_cells(blob, parent);
+							int ns = fdt_size_cells(blob, parent);
+							fdt32_t reg[4];
+							int idx = 0;
+
+							if (na < 1 || na > 2 || ns < 1 || ns > 2) {
+								na = 2;
+								ns = 2;
+							}
+							if (na == 2)
+								reg[idx++] = cpu_to_fdt32((u64)plat->base >> 32);
+							reg[idx++] = cpu_to_fdt32((u32)plat->base);
+							if (ns == 2)
+								reg[idx++] = cpu_to_fdt32((u64)plat->size >> 32);
+							reg[idx++] = cpu_to_fdt32((u32)plat->size);
+
+							fdt_setprop(blob, rsvoff, "reg", reg, idx * sizeof(fdt32_t));
+						}
+					}
+				}
+			}
+		}
+	}
+#endif
 
 	return 0;
 }
